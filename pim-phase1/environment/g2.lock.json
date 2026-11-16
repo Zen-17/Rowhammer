@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "gate": "G2",
+  "generated_utc": "2026-11-15T13:23:35+00:00",
+  "upstream_commit": "3703d1f19c8f027360cc33a3243eb271e3bb6898",
+  "upstream_tree": "7ac34faf86579aca00f5b357c61b5550d1dff7e7",
+  "g0_binary": {
+    "path": "runs/baseline/sim-g0",
+    "bytes": 13878728,
+    "sha256": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e"
+  },
+  "g1_binary_sha256": "be9f6a57812b41b490d166acbd9f498c31282f9c9e4624711114713c50e2ad26",
+  "g1_lock": {
+    "path": "environment/g1.lock.json",
+    "bytes": 7288,
+    "sha256": "082c386d367539c966a79234921321550d95420a3d7d0c0be2b6e48fb3ac782a"
+  },
+  "g2_binary": {
+    "path": "runs/g2/sim-g2",
+    "bytes": 16676536,
+    "sha256": "f54c8abded3c9a373e79a7798f6c1234b5bd1c006ddd6907c4127d053499a8d8"
+  },
+  "g2_binary_sha_file": {
+    "path": "environment/g2_binary.sha256",
+    "bytes": 80,
+    "sha256": "9a419606c3c9d36ecad88acd0e8c1eb70e9d0a7a21a20407bf2e5281af181e18"
+  },
+  "g2_clean_binary_sha256": "0d8723ed906af1151881811fa5d070a2c5515aa60ca0451c19be4d7621103083",
+  "source_patch": {
+    "path": "environment/source_g2.patch",
+    "bytes": 58631,
+    "sha256": "2b7b65bab048e44160c9ef04ef8cd59e68ea2acc6a7cd950ec35da23d40dc0ec"
+  },
+  "source_patch_g1": {
+    "path": "environment/source_g1.patch",
+    "bytes": 48680,
+    "sha256": "629a36c016b3a5df2fa00dcadceec6b1bb00e29b1b4564342f7a16c5f96e19db"
+  },
+  "configs": [
+    {
+      "path": "configs/phase1_system_1ch.ini",
+      "bytes": 1823,
+      "sha256": "0f1dfa16924f74e924a36f0a86ccaf502a3922ce35358741db23582e03b68f9c"
+    },
+    {
+      "path": "configs/phase1_system_2ch.ini",
+      "bytes": 1824,
+      "sha256": "841c94cab634c8a2f3bd4e247fae7f0e35042d1d885e52c48e9b8fc25c36c2f0"
+    },
+    {
+      "path": "configs/schema.json",
+      "bytes": 2855,
+      "sha256": "1914f8469958d1b7a70f5b24529d7cfd138f79adb4d7ca5e5428aa739745ced4"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "simulator/src/Phase1Address.h",
+      "bytes": 2398,
+      "sha256": "6d37cfddd0eff27a9c2d1e3937424992677fa2ce21117a627192134fe553e5bb"
+    },
+    {
+      "path": "simulator/src/Phase1Address.cpp",
+      "bytes": 5150,
+      "sha256": "e2be20134365eb6ca759cb938957ba0dd0dc95136e197621dab43aad2fbfcb14"
+    },
+    {
+      "path": "simulator/src/Phase1Feeder.h",
+      "bytes": 4445,
+      "sha256": "7a41c02dbc6d770af05cf3b46f18eef2a46dcce6f5b08c0dc0d5019c18fd3b31"
+    },
+    {
+      "path": "simulator/src/Phase1Feeder.cpp",
+      "bytes": 11307,
+      "sha256": "b65e619d7c4466641ab1d39c94965c0b0c4b451e19652c1ed89333d0806908ab"
+    },
+    {
+      "path": "simulator/src/Phase1Driver.h",
+      "bytes": 1526,
+      "sha256": "185a95f739446fdb9839f00806573e05b8da0f57d6ce64953a0abb09ab7967e1"
+    },
+    {
+      "path": "simulator/src/Phase1Driver.cpp",
+      "bytes": 7275,
+      "sha256": "7f56fb90a5cb12624686a6a18c80be297cbc3f87a6db75110bfeaf32833d9c12"
+    },
+    {
+      "path": "simulator/src/Phase1Trace.h",
+      "bytes": 1037,
+      "sha256": "30e6c58d757a8e0ee1627a4b1cfa42f2308c1c3d792a8b3e1210acd840f51f4d"
+    },
+    {
+      "path": "simulator/src/Phase1Trace.cpp",
+      "bytes": 2158,
+      "sha256": "323b5cffa70750f36c51af6bb4a51cc263a16daa93bdd1f69590c90dcdb8d400"
+    },
+    {
+      "path": "simulator/src/tests/Phase1TestCases.cpp",
+      "bytes": 19117,
+      "sha256": "7a4c96c7834cbc4191a8fce214ef10b738f98c0c6361db1fd8b0a3c9959799ae"
+    },
+    {
+      "path": "simulator/src/MultiChannelMemorySystem.h",
+      "bytes": 4577,
+      "sha256": "221785910f0d48e4ac4070a56840f7bdc8edb09b070d08d432d74eadc7a6776e"
+    },
+    {
+      "path": "simulator/src/MultiChannelMemorySystem.cpp",
+      "bytes": 20606,
+      "sha256": "85f06ead22257e997354c2d80ee9211605a22f1ac27e399850db1b3c1ddf172d"
+    }
+  ],
+  "scripts": [
+    {
+      "path": "scripts/run_g2.py",
+      "bytes": 10288,
+      "sha256": "039d08e3fcf844c7982992beb53d522c0c810531859050660ef63537bd83f4ea"
+    },
+    {
+      "path": "scripts/validate_run.py",
+      "bytes": 15192,
+      "sha256": "f1799c2975fa44031cc9b256d124a732d0cf121858e00b349860ae2d4d22311a"
+    },
+    {
+      "path": "scripts/run_g1.py",
+      "bytes": 5976,
+      "sha256": "39c65d219e36d15ba13ece740f2972b3c9b33ae00c42ba6f8dace6cd2b1b49b4"
+    },
+    {
+      "path": "scripts/g1_validate.py",
+      "bytes": 13330,
+      "sha256": "be48c6f14fd669545d2b2681aec1c90737d8713b5b3b28dd0833621364566776"
+    },
+    {
+      "path": "scripts/validate_g0_artifacts.py",
+      "bytes": 3090,
+      "sha256": "2413bcd435d6f9e7c63a1691ebf113d60235431abb1525448e0fa341290674f5"
+    }
+  ],
+  "tests": [
+    {
+      "path": "tests/test_schema.py",
+      "bytes": 1469,
+      "sha256": "ef85528b0d4a34edff3bc4e230786ec3788126f2da6d1d02ec1912b24641ec5d"
+    },
+    {
+      "path": "runs/g2/upstream-tests.xml",
+      "bytes": 1039,
+      "sha256": "f5d743ce245f61134d6c8258a3ae2e1ab8b4cf176b3d77c47441d7cfb7e410f2"
+    },
+    {
+      "path": "runs/g2/pimbench_add.log",
+      "bytes": 911,
+      "sha256": "0a3c6c8b53576166890791f96ce9439dd013b3d7c5a7103ffeb40957deff2f17"
+    }
+  ],
+  "results": {
+    "comparison": {
+      "path": "results/g2/comparison.csv",
+      "bytes": 230,
+      "sha256": "fc3e91f03636824661eb2baf7e07ad90f966b102484f8246f6a8c5069d3aa375"
+    },
+    "validation": {
+      "path": "results/g2/validation.json",
+      "bytes": 1085,
+      "sha256": "179096ee29df7eff87cc7727db044a002baffe31bdb2db1f956d41dab98ac043"
+    }
+  },
+  "run_manifest": {
+    "path": "runs/g2/run_manifest.json",
+    "bytes": 1109,
+    "sha256": "d08cbe5de269250280cce32bd76891e362c6f4280b0b7e81c5ee41d3424813dd"
+  },
+  "clean_replay": {
+    "validation": {
+      "path": "runs/g2/clean_replay/validation.json",
+      "bytes": 558,
+      "sha256": "49e9f811d6d9bcfc41d45f5665e782f167923968651aebb7c4efd912203ec400"
+    },
+    "binary_sha256": "0d8723ed906af1151881811fa5d070a2c5515aa60ca0451c19be4d7621103083",
+    "pimkernel_xml": {
+      "path": "runs/g2/clean_replay/upstream-tests.xml",
+      "bytes": 1038,
+      "sha256": "84afbd0536e9c11ae3fe5711d80ad2653f034bbfc3becdf0cc231aef239ccd4e"
+    }
+  },
+  "logs": {
+    "command_index": {
+      "path": "logs/g2_command_index.md",
+      "bytes": 2409,
+      "sha256": "6c7df46ae60496a560dd62f26646046b62a23f69b8bb6182d55763a15f942ead"
+    },
+    "final_audit": {
+      "path": "logs/g2_final_audit.log",
+      "bytes": 1980,
+      "sha256": "a6d16dedce25725ef4c45a3b1f0ee930f746be5846f745b0daf7ef64f47b7506"
+    },
+    "schema_test": {
+      "path": "logs/g2_schema_test.log",
+      "bytes": 191,
+      "sha256": "eeba90840ec79c588d7825c8d9acbfb37de9e449af2fd0fb8eecfcc8f670b945"
+    },
+    "negative_sequence": {
+      "path": "logs/g2_negative_sequence.log",
+      "bytes": 2296,
+      "sha256": "e0f4ad87d7c48597f495a20fd6e09020572630a2c60315454b506beb34ce0673"
+    }
+  },
+  "g2_validation": {
+    "nt1_ext_off_on_cycles": true,
+    "nt1_ext_off_g1_cycles": true,
+    "nt1_ext_off_on_output": true,
+    "nt1_ext_off_g1_output": true,
+    "nt8_ext_off_on_cycles": true,
+    "nt8_ext_off_g1_cycles": true,
+    "nt8_ext_off_on_output": true,
+    "nt8_ext_off_g1_output": true
+  },
+  "environment_hash": "9bd07d55353ada1ef0f6a2f96a41e816caaf806fc048f19f0477e557829af90e",
+  "docs_note": "docs are cumulative and updated by later gates; no G2-only doc snapshot is retained. Code/config/test hashes remain in this lock.",
+  "source_patch_note": "G2 snapshot preserved as environment/source_g2.patch; environment/source.patch is cumulative G3+"
+}

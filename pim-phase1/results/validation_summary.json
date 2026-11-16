@@ -1,0 +1,97 @@
+{
+  "gate": "G8",
+  "manifest_total": 2602,
+  "executed_total": 2602,
+  "missing": 0,
+  "missing_run_ids": [],
+  "status_counts": {
+    "SUCCESS": 2595,
+    "EXPECTED_NEGATIVE": 7
+  },
+  "expected_negative_declared": 7,
+  "expected_negative_observed": 7,
+  "reconciliation": {
+    "manifest_cases": 2602,
+    "success": 2595,
+    "expected_negative": 7,
+    "failure": 0,
+    "timeout": 0,
+    "missing": 0
+  },
+  "groups": [
+    {
+      "group": "P1-A",
+      "cases": 144,
+      "success": 144,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 144
+    },
+    {
+      "group": "P1-B",
+      "cases": 63,
+      "success": 63,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 63
+    },
+    {
+      "group": "P1-C",
+      "cases": 1848,
+      "success": 1848,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 1848
+    },
+    {
+      "group": "P1-D",
+      "cases": 22,
+      "success": 22,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 22
+    },
+    {
+      "group": "P1-E",
+      "cases": 27,
+      "success": 20,
+      "expected_negative": 7,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 27
+    },
+    {
+      "group": "P1-F Cost",
+      "cases": 480,
+      "success": 480,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 480
+    },
+    {
+      "group": "P1-F Robustness",
+      "cases": 18,
+      "success": 18,
+      "expected_negative": 0,
+      "fail": 0,
+      "timeout": 0,
+      "contract_pass": 18
+    }
+  ],
+  "figure_data": [
+    "fig1_path_coverage.csv",
+    "fig2_report_events.csv",
+    "fig2_report_latency.csv",
+    "fig3_control_window.csv",
+    "fig4_quiescence.csv",
+    "fig5_restore.csv",
+    "fig6_cost.csv",
+    "fig6_robustness.csv"
+  ],
+  "pass": true
+}

@@ -1,0 +1,19 @@
+{
+  "gate": "G5",
+  "pass": true,
+  "checks": {
+    "case_count": true,
+    "all_cases_pass": true,
+    "no_simulation_failures": true,
+    "runtime_same_cycle_test": true,
+    "all_f0_published": true,
+    "all_f1_suspect": true,
+    "all_f2_poisoned": true,
+    "all_blocked_cases_blocked": true,
+    "bypass_asserted": true
+  },
+  "binary_sha256": "1a527f95cd01af19a6306cdf35c8a55cde3be29b3bea7b56ff7230289315cf3a",
+  "patch_sha256": "f3d89838ce51df16d0eea8c197f2947b36cbad9298aa4fdd3deff86e5e999120",
+  "case_count": 12,
+  "failures": 0
+}

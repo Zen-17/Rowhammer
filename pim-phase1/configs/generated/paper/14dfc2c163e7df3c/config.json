@@ -1,0 +1,28 @@
+{
+  "run_id": "14dfc2c163e7df3c",
+  "group": "P1-F Robustness",
+  "group_key": "P1F_ROBUST",
+  "fixture": "Phase1G8RobustFixture.RunCase",
+  "params": {
+    "experiment": "P1F_ROBUST",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "queue_capacity": "8",
+    "service_interval_cycles": "1",
+    "drop_rate": "0",
+    "repeat_reads": "32",
+    "transport_delay_cycles": "0",
+    "watchdog_cycles": "200000",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/14dfc2c163e7df3c"
+  },
+  "case": {
+    "case_id": "P1F_ROBUST_Q8_I1_drop0",
+    "queue_capacity": 8,
+    "service_interval_cycles": 1,
+    "drop_rate": "0",
+    "repeat_reads": 32,
+    "transport_delay_cycles": 0,
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/14dfc2c163e7df3c"
+  },
+  "expected_negative": false
+}

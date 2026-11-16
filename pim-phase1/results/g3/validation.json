@@ -1,0 +1,46 @@
+{
+  "binary_sha256": "6b31ba8a06ab08f746cfb9ec32a25f8534ad9168976845f244fc99412c41ec89",
+  "patch_sha256": "933b32d7f4ef8168882a95963b14516c3d497dc0e8fe54ac8f91455e64b68c8d",
+  "ecc_rows": 21032,
+  "flip_kinds": {
+    "none": 8,
+    "single": 576,
+    "double": 20448
+  },
+  "statuses": {
+    "CLEAN": 8,
+    "CORRECTED": 576,
+    "UNCORRECTABLE": 20448
+  },
+  "witness": {
+    "key": "ch=0,rank=0,bank=0,row=0,burst_col=0,cw=0",
+    "f1_data_bit": 15,
+    "data_before_hex": "0123456789abcdef",
+    "raw_after_injection_hex": "0123456789ab4def",
+    "parity_hex": "9c",
+    "status": "CORRECTED",
+    "corrected_data_hex": "0123456789abcdef",
+    "corrected_equals_original": true,
+    "second_read_status": "CORRECTED",
+    "scrubbed": false,
+    "legal_write_status": "CLEAN"
+  },
+  "checks": {
+    "cpp_exit_zero": true,
+    "python_exit_zero": true,
+    "csv_row_count": true,
+    "csv_single_count": true,
+    "csv_double_count": true,
+    "csv_clean_count": true,
+    "single_all_corrected": true,
+    "double_all_uncorrectable": true,
+    "clean_all_clean": true,
+    "witness_exists": true,
+    "witness_corrected": true,
+    "witness_data_equal": true,
+    "witness_no_scrub": true,
+    "witness_second_read_ce": true,
+    "witness_legal_write_clean": true
+  },
+  "pass": true
+}

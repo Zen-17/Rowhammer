@@ -1,0 +1,3 @@
+case_id,ext_off_cycles,ext_on_cycles,g1_feeder_cycles,cycles_ext_equal,cycles_match_g1,output_ext_equal,output_match_g1
+W1_1ch_nt1_seed0,2565,2565,2565,True,True,True,True
+W1_1ch_nt8_seed0,18030,18030,18030,True,True,True,True

@@ -1,0 +1,76 @@
+{
+  "gate": "G0",
+  "mode": "saved-artifacts",
+  "pass": true,
+  "checks": [
+    {
+      "name": "upstream_commit",
+      "pass": true,
+      "detail": "3703d1f19c8f027360cc33a3243eb271e3bb6898"
+    },
+    {
+      "name": "g0_binary_preserved",
+      "pass": true,
+      "detail": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e"
+    },
+    {
+      "name": "g0_binary_record",
+      "pass": true,
+      "detail": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e"
+    },
+    {
+      "name": "g0_xml_hash",
+      "pass": true,
+      "detail": "e7be608f8df6d78204b32e3de8bf7cd71877bce25218b2f32069633747dd40a2"
+    },
+    {
+      "name": "g0_xml_counts",
+      "pass": true,
+      "detail": {
+        "tests": "5",
+        "failures": "0",
+        "disabled": "0",
+        "errors": "0",
+        "time": "16.031",
+        "timestamp": "2026-11-15T12:27:35.197",
+        "name": "AllTests"
+      }
+    },
+    {
+      "name": "g0_optional_failure_preserved",
+      "pass": true,
+      "detail": {
+        "tests": "11",
+        "failures": "1",
+        "failed_names": [
+          "add"
+        ]
+      }
+    },
+    {
+      "name": "g0_config:ini/HBM2_samsung_2M_16B_x64.ini",
+      "pass": true,
+      "detail": "a770f3d6e1347eef0396d438859e84b7b32001dab5513e662f9bb24e4e6a3ecd"
+    },
+    {
+      "name": "g0_config:system_hbm.ini",
+      "pass": true,
+      "detail": "a22b185f32341a1082607ce89ad67c3b38f90f7e5ce26ba6ec12f972236e7170"
+    },
+    {
+      "name": "g0_config:system_hbm_1ch.ini",
+      "pass": true,
+      "detail": "06554c0b1fe72c491ee617ccc05147d052b0acd2a66d4cba669161970c0720e2"
+    },
+    {
+      "name": "g0_config:system_hbm_64ch.ini",
+      "pass": true,
+      "detail": "d969b82501925fb5c26297feefb22a1aaa5986b87edefeee35ef8068aaff79be"
+    },
+    {
+      "name": "g0_environment_hash",
+      "pass": true,
+      "detail": "9bd07d55353ada1ef0f6a2f96a41e816caaf806fc048f19f0477e557829af90e"
+    }
+  ]
+}

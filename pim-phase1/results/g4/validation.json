@@ -1,0 +1,16 @@
+{
+  "gate": "G4",
+  "pass": true,
+  "checks": {
+    "all_cases_present": true,
+    "p1a_count": true,
+    "p1b_count": true,
+    "all_p1a_pass": true,
+    "all_p1b_pass": true,
+    "no_case_failure": true
+  },
+  "binary_sha256": "1d3aa682a2f91740e755a52be3d71976ea790ce91d463903ce91a74e83b19ef3",
+  "patch_sha256": "9c73317883455b888f76367db2649bdc1783d630febc3c4dab9b5ce3c552b492",
+  "case_count": 207,
+  "failures": 0
+}

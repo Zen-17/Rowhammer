@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.invalid/pim-phase1/g2-schema.json",
+  "title": "Phase1 G2 run configuration and event row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "experiment",
+    "workload",
+    "mode",
+    "trace_mode",
+    "channels",
+    "ranks",
+    "capacity_mb",
+    "n_tiles",
+    "seed",
+    "feeder_outstanding_limit",
+    "feeder_issue_per_cycle",
+    "watchdog_cycles",
+    "device_ini",
+    "system_ini",
+    "output_dir"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "experiment": {"type": "string", "minLength": 1},
+    "workload": {"enum": ["W0", "W1", "ADDRESS"]},
+    "mode": {"enum": ["direct", "feeder"]},
+    "trace_mode": {"enum": ["ext_off", "ext_on"]},
+    "channels": {"enum": [1, 2]},
+    "ranks": {"const": 1},
+    "capacity_mb": {"enum": [256, 512]},
+    "n_tiles": {"type": "integer", "minimum": 0},
+    "seed": {"type": "integer", "minimum": 0},
+    "feeder_outstanding_limit": {"const": 8},
+    "feeder_issue_per_cycle": {"const": 1},
+    "watchdog_cycles": {"type": "integer", "minimum": 1},
+    "dim_bursts": {"type": "integer", "minimum": 0},
+    "elements": {"type": "integer", "minimum": 0},
+    "device_ini": {"type": "string", "minLength": 1},
+    "system_ini": {"type": "string", "minLength": 1},
+    "output_dir": {"type": "string", "minLength": 1}
+  },
+  "definitions": {
+    "event_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_seq", "cycle", "phase", "event_type", "kernel_id", "version_id",
+        "access_id", "channel", "rank", "actual_bank", "row", "column",
+        "access_path", "bytes", "status"
+      ],
+      "properties": {
+        "event_seq": {"type": "integer", "minimum": 1},
+        "cycle": {"type": "integer", "minimum": 0},
+        "phase": {"enum": ["ENQUEUE", "START", "FEEDER", "MEMORY", "COMPLETE", "FINALIZE"]},
+        "event_type": {
+          "enum": [
+            "DESCRIPTOR_ENQUEUE", "BARRIER_ENQUEUE", "CONTROLLER_ACCEPT",
+            "CONTROLLER_REJECT", "BARRIER_RETIRED", "READ_COMPLETE",
+            "WRITE_DATA_DONE", "RUN_START", "RUN_END"
+          ]
+        },
+        "kernel_id": {"type": "string"},
+        "version_id": {"type": "string"},
+        "access_id": {"type": "string", "pattern": "^([0-9]*)$"},
+        "channel": {"type": "string", "pattern": "^([0-9]*)$"},
+        "rank": {"type": "string", "pattern": "^([0-9]*)$"},
+        "actual_bank": {"type": "string", "pattern": "^([0-9]*)$"},
+        "row": {"type": "string", "pattern": "^([0-9]*)$"},
+        "column": {"type": "string", "pattern": "^([0-9]*)$"},
+        "access_path": {"type": "string"},
+        "bytes": {"type": "string", "pattern": "^([0-9]*)$"},
+        "status": {"type": "string"}
+      }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-11-15T15:23:45+00:00",
+  "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+  "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+  "definition": "no-fault producer from mode preparation start to completion; input preload excluded; mode preparation and result writeback included",
+  "p1c_t_ref": {
+    "1": 731,
+    "8": 3339
+  },
+  "p1f_t_ref": {
+    "1": 804,
+    "8": 4130
+  },
+  "cases": [
+    {
+      "kind": "P1C",
+      "n_tiles": 1,
+      "exit_code": 0,
+      "t_ref_cycles": 731,
+      "config_sha256": "e035307b17b009c98800524e3ed7b170ac354b88d1601848e48497eb65030d16",
+      "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+      "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+      "run_dir": "runs/g8/calibration/p1c_nt1"
+    },
+    {
+      "kind": "P1C",
+      "n_tiles": 8,
+      "exit_code": 0,
+      "t_ref_cycles": 3339,
+      "config_sha256": "74a88f13cce9b17f20fe9c201bd1b74f0a360f08fd8a56daf18b0bee4cdad21f",
+      "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+      "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+      "run_dir": "runs/g8/calibration/p1c_nt8"
+    },
+    {
+      "kind": "P1F",
+      "n_tiles": 1,
+      "exit_code": 0,
+      "t_ref_cycles": 804,
+      "config_sha256": "7467d541e109b0a454c1a150839bf9f360d8888efbdbaf5338bfccd9ca6c56f2",
+      "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+      "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+      "run_dir": "runs/g8/calibration/p1f_nt1"
+    },
+    {
+      "kind": "P1F",
+      "n_tiles": 8,
+      "exit_code": 0,
+      "t_ref_cycles": 4130,
+      "config_sha256": "0a9520eb0bf554db681fc4bfe36ece0016f8ffa940751fcd312b40789d0ca4b6",
+      "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+      "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+      "run_dir": "runs/g8/calibration/p1f_nt8"
+    }
+  ]
+}

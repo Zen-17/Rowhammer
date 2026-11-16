@@ -1,0 +1,96 @@
+schema_version: 1
+suite: paper
+calibration: results/g8/calibration.json
+
+groups:
+  P1A:
+    fixture: Phase1G4Fixture.RunCase
+    profiles: [NATIVE, LOCAL_VISIBLE, LOCAL_HIDDEN, HOST_ONLY]
+    paths: [HREAD, PREAD, PWRITE_HREAD, PWRITE_PREAD]
+    faults: [F0, F1, F2]
+    banks: [0, 3, 15]
+    granularity: bank
+    transport_delay_cycles: 0
+    service_interval_cycles: 1
+    target_lane: 0
+    data_bit_in_lane: 15
+    fault_bit2: 1
+    watchdog_cycles: 200000
+
+  P1B:
+    fixture: Phase1G4Fixture.RunCase
+    profile: LOCAL_VISIBLE
+    path: HREAD
+    fault: F1
+    banks: [0, 3, 15]
+    granularities: [bank, page]
+    transport_delays: [0, 1, 16, 256, 4096]
+    service_intervals: [1, 8]
+    target_lane: 0
+    data_bit_in_lane: 15
+    fault_bit2: 1
+    watchdog_cycles: 200000
+    burst_reads: 32
+    burst_interval: 8
+    burst_delay: 0
+
+  P1C:
+    fixture: Phase1G8P1CFixture.RunCase
+    profile: LOCAL_VISIBLE
+    granularity: bank
+    fault_kind: F1
+    n_tiles: [1, 8]
+    consumers: [HOST, PIM]
+    seed_start: 0
+    seed_stop: 29
+    delay_ratios: [0.0, 0.1, 0.5, 1.0, 2.0]
+    hold_ratios: [0.0, 0.25, 1.0]
+    handler_delay_cycles: 8
+    service_interval_cycles: 1
+    report_queue_capacity: 64
+    watchdog_cycles: 400000
+    negative_profiles: [LOCAL_HIDDEN, HOST_ONLY]
+    negative_consumers: [HOST, PIM]
+    negative_holds: [0.0, 1.0]
+    negative_seed_start: 0
+    negative_seed_stop: 5
+
+  P1D:
+    fixture: Phase1G6Fixture.RunCase
+    synthetic_scenarios: [SYNTHETIC_BEFORE, SYNTHETIC_QUEUE, SYNTHETIC_INFLIGHT, SYNTHETIC_NEAR]
+    feeder_limits: [1, 8, 32]
+    handler_delays: [0, 8, 64]
+    observation_cycles: 8000
+    watchdog_cycles: 200000
+    actual_ce: true
+    two_channel: true
+
+  P1E:
+    fixture: Phase1G7Fixture.RunCase
+    n_tiles: [1, 8]
+    seed_start: 0
+    seed_stop: 9
+    trigger: REPORT
+    handler_delay_cycles: 8
+    watchdog_cycles: 400000
+    status_cases: [CHECKPOINT_MISSING, VERSION_MISMATCH, CHECKPOINT_CORRUPT, ALREADY_COMMITTED, STALE_HANDLE]
+    negative_controls: [NO_INPUT_RESTORE, NO_STATE_RESET]
+    negative_control_watchdog: 10000
+
+  P1F_COST:
+    fixture: Phase1G8CostFixture.RunCase
+    n_tiles: [1, 8]
+    consumers: [HOST, PIM]
+    seed_start: 0
+    seed_stop: 29
+    policies: [EXT_OFF, LOCAL_VISIBLE_H0, LOCAL_VISIBLE_H025T, LOCAL_VISIBLE_H1T]
+    watchdog_cycles: 400000
+
+  P1F_ROBUST:
+    fixture: Phase1G8RobustFixture.RunCase
+    queue_capacities: [1, 8, 64]
+    service_intervals: [1, 8, 64]
+    drop_rates: ["0", "0.1"]
+    repeat_reads: 32
+    transport_delay_cycles: 0
+    watchdog_cycles: 200000

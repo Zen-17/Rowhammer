@@ -1,0 +1,379 @@
+{
+  "generated_utc": "2026-11-15T15:36:04+00:00",
+  "stat_seed": 20261115,
+  "bootstrap_resamples": 10000,
+  "figures": [
+    {
+      "figure": "fig01_path_coverage",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig1_path_coverage.csv",
+          "sha256": "25e96e9f2907bfc826cd569b0546480c4570f8fe61ffd778a6f836bc9782869f"
+        }
+      ],
+      "columns": [
+        "bank",
+        "delivered_reports",
+        "dropped_reports",
+        "fault",
+        "format_invalid",
+        "internal_ce",
+        "internal_ue",
+        "output_correct",
+        "path",
+        "profile"
+      ],
+      "filters": {
+        "faults": [
+          "F1",
+          "F2"
+        ],
+        "banks": [
+          0,
+          3,
+          15
+        ]
+      },
+      "sample_count": 144,
+      "aggregation": "per profile/path/fault: C/R/I/U counts over 3 banks; color=corrected fraction",
+      "outputs": [
+        {
+          "path": "figures/fig01_path_coverage.pdf",
+          "sha256": "0a349d5e8e883fbe2a66d9abd2c8d8416b681174bf895076137b1968ae179eaf"
+        },
+        {
+          "path": "figures/fig01_path_coverage.svg",
+          "sha256": "7c62b067f562da3a1ebcc1c42c9fd54ec856466f1fc3b2c3a223c7ef71e628a3"
+        },
+        {
+          "path": "figures/fig01_path_coverage.png",
+          "sha256": "f98dcbb937808df5e7347bfeeb11b62140914990bd88c040a5209e4a7dfba8fb"
+        },
+        {
+          "path": "figures/gray/fig01_path_coverage.png",
+          "sha256": "1268cd1dda9943a7bf237335deae10293a2b3a240e49f23557a937cb31be00bb"
+        }
+      ]
+    },
+    {
+      "figure": "fig02_report_latency",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig2_report_latency.csv",
+          "sha256": "9fd4135b4cd6bf163ca06ccbc2225081e0da89dc6c7e48be6241004a3d09e72a"
+        },
+        {
+          "path": "results/figure_data/fig2_report_events.csv",
+          "sha256": "a5a18439d59da0a862b1e70d486877d18725b4e0bfff22351fec9ba815a29e3e"
+        }
+      ],
+      "columns": [
+        "bank",
+        "cumulative_reports",
+        "delivered_reports",
+        "dropped_reports",
+        "error_class",
+        "granularity",
+        "latency_cycles",
+        "max_queue_depth",
+        "path",
+        "region_id",
+        "region_type",
+        "report_cycle",
+        "report_index",
+        "report_latency_max",
+        "report_latency_mean",
+        "report_latency_min",
+        "service_interval_cycles",
+        "transport_delay_cycles"
+      ],
+      "filters": {
+        "path": "HREAD",
+        "burst_banks": [
+          0,
+          3,
+          15
+        ]
+      },
+      "sample_count": 159,
+      "aggregation": "single-event mean over banks; burst cumulative counts from reports.csv",
+      "outputs": [
+        {
+          "path": "figures/fig02_report_latency.pdf",
+          "sha256": "28818af949e87cf52fa114da78b5210ac8c8c983d92d3d097a2a4baf0031be47"
+        },
+        {
+          "path": "figures/fig02_report_latency.svg",
+          "sha256": "5adda2ad240f8fd9c7f590376b549a64d5a13cc1fdec4a9b28f2516a3a31c779"
+        },
+        {
+          "path": "figures/fig02_report_latency.png",
+          "sha256": "ec72b2199743782d8a74a9eda5074bc42dc964faea0f744e89c914c21fb19626"
+        },
+        {
+          "path": "figures/gray/fig02_report_latency.png",
+          "sha256": "6c80f7dcd7c326cfa1fe9eec914b169defedfc51509b8ce97a58107189a2eae6"
+        }
+      ]
+    },
+    {
+      "figure": "fig03_control_window",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig3_control_window.csv",
+          "sha256": "c41531b5b9ff8a5e65221394344dce0b60a4079d5778dad8a1d41e8a94d06be9"
+        }
+      ],
+      "columns": [
+        "consumed",
+        "consumer",
+        "control",
+        "delay_ratio",
+        "hold_cycles",
+        "hold_ratio",
+        "n_tiles",
+        "outcome_class",
+        "output_changed",
+        "profile",
+        "published",
+        "quiesce_cycles",
+        "seed",
+        "transport_delay_cycles"
+      ],
+      "filters": {
+        "profile": "LOCAL_VISIBLE",
+        "control": false
+      },
+      "sample_count": 1800,
+      "aggregation": "fraction TIMELY_CONTROL over 30 seeds per cell; no output changed observed",
+      "outputs": [
+        {
+          "path": "figures/fig03_control_window.pdf",
+          "sha256": "41219eb5866c98f6b078f38d6a4c904ab9109d9955c3253220f31a4783bf13af"
+        },
+        {
+          "path": "figures/fig03_control_window.svg",
+          "sha256": "48f005f209b24cd583a9babea8d89985a8486121143ef2ed22b185f5e1743cc3"
+        },
+        {
+          "path": "figures/fig03_control_window.png",
+          "sha256": "ea3e484d5ca44c1016cce41736dee94f9b803cc211264f86c49d672391c74b7e"
+        },
+        {
+          "path": "figures/gray/fig03_control_window.png",
+          "sha256": "79fa44eed486845190f196bf5b60f3c121bb5d4d7f2f3f6404ea4bf270035d29"
+        }
+      ]
+    },
+    {
+      "figure": "fig04_quiescence",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig4_quiescence.csv",
+          "sha256": "63439713e2dd9ac2ed162b7fd9b57f70770963b0ec9c421af78a68bc7e1897d3"
+        }
+      ],
+      "columns": [
+        "channels",
+        "clock_delta",
+        "data_delta_after_ack",
+        "external_pending_frozen",
+        "feeder_limit",
+        "handler_delay",
+        "other_channel_data_delta",
+        "quiesce_cycles",
+        "refresh_after",
+        "refresh_before",
+        "report_count",
+        "scenario"
+      ],
+      "filters": {
+        "scenarios": [
+          "SYNTHETIC_BEFORE",
+          "SYNTHETIC_QUEUE",
+          "SYNTHETIC_INFLIGHT",
+          "SYNTHETIC_NEAR",
+          "ACTUAL_CE",
+          "TWO_CHANNEL"
+        ]
+      },
+      "sample_count": 22,
+      "aggregation": "synthetic means over 3 K values; actual CE mean over L; two-channel delta",
+      "outputs": [
+        {
+          "path": "figures/fig04_quiescence.pdf",
+          "sha256": "9ec70fcc68a5543e35d355818928bf17d2fc88597bde181ea6460a3abfeb67bc"
+        },
+        {
+          "path": "figures/fig04_quiescence.svg",
+          "sha256": "6e9c063752a6d07290d8f0caaed3f1caecf18126ca958465c5b4d6481ae41791"
+        },
+        {
+          "path": "figures/fig04_quiescence.png",
+          "sha256": "bf779274160bb675dc08d7d388e7940635aae819010f856030f195106c89bed2"
+        },
+        {
+          "path": "figures/gray/fig04_quiescence.png",
+          "sha256": "3e711ef45a14f60e8a61a10d072c710293d0c4dff77016fac7c3bba803617d3e"
+        }
+      ]
+    },
+    {
+      "figure": "fig05_restore",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig5_restore.csv",
+          "sha256": "da797b2bf1f277aaf58aeca933fa7e6328f85a9200a9af59603ddac9c4f2b75d"
+        }
+      ],
+      "columns": [
+        "checkpoint_bytes",
+        "n_tiles",
+        "new_state",
+        "output_bit_exact",
+        "quiesce_cycles",
+        "recovery_cycles",
+        "reexec_cycles",
+        "restore_bytes",
+        "restore_cycles",
+        "restore_writes",
+        "seed"
+      ],
+      "filters": {
+        "positive_cases": 20,
+        "n_tiles": [
+          1,
+          8
+        ]
+      },
+      "sample_count": 20,
+      "aggregation": "mean stages over 10 seeds; bootstrap 95% CI on ACK\u2192publish",
+      "outputs": [
+        {
+          "path": "figures/fig05_restore.pdf",
+          "sha256": "c0d71f4a06cde94a5b104991ae44a6ec347c6ffcb2872f332d395d4fcbece839"
+        },
+        {
+          "path": "figures/fig05_restore.svg",
+          "sha256": "38f6d1645bede76ee54c41506d42f313b496a98f1d62841eb180538640506e79"
+        },
+        {
+          "path": "figures/fig05_restore.png",
+          "sha256": "5b8c7bcb7e8309c7fd25f264fb05712d83dd02a21968601e665f56b547887c05"
+        },
+        {
+          "path": "figures/gray/fig05_restore.png",
+          "sha256": "00e26b34a3cdf14e0aa0c6a36c92ea8c32a17d44f881758906714ca560382efc"
+        }
+      ]
+    },
+    {
+      "figure": "fig06_cost",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig6_cost.csv",
+          "sha256": "b1a9c760024801e1699875f9fc17c7f885f2a22f3e1200c744f2e6c63230bb95"
+        }
+      ],
+      "columns": [
+        "checkpoint_bytes",
+        "consumer",
+        "end_to_end_cycles",
+        "hold_cycles",
+        "n_tiles",
+        "output_bit_exact",
+        "overhead_fraction",
+        "paired_ext_off_end_to_end",
+        "paired_ext_off_wall_seconds",
+        "parity_bytes",
+        "peak_held_output_bytes",
+        "policy",
+        "producer_cycles",
+        "runtime_metadata_bytes",
+        "seed",
+        "wall_overhead_fraction",
+        "wall_seconds"
+      ],
+      "filters": {
+        "policy": [
+          "LOCAL_VISIBLE_H0",
+          "LOCAL_VISIBLE_H025T",
+          "LOCAL_VISIBLE_H1T"
+        ],
+        "paired_by": "seed"
+      },
+      "sample_count": 480,
+      "aggregation": "paired EXT_OFF per seed; bootstrap 95% CI over 30 seeds",
+      "outputs": [
+        {
+          "path": "figures/fig06_cost.pdf",
+          "sha256": "b1d6cf0d8aca042cf819b93df45de65b6784e0c4a64b7eb90b8719d48ea39197"
+        },
+        {
+          "path": "figures/fig06_cost.svg",
+          "sha256": "526ee003f12d868e4825a7f58a60cb1d407bdb2a580de07c4a68637cb3e3d66a"
+        },
+        {
+          "path": "figures/fig06_cost.png",
+          "sha256": "5dd28fbca9ebd75ff299540b107bf0c4b7975c4064f13d5c93c4fc7b3a6c8e75"
+        },
+        {
+          "path": "figures/gray/fig06_cost.png",
+          "sha256": "db3c79793c07e7b649c7ddadffa44c3767402214ddf3ff8f94f58049b06c2ed5"
+        }
+      ]
+    },
+    {
+      "figure": "figS1_robustness",
+      "inputs": [
+        {
+          "path": "results/figure_data/fig6_robustness.csv",
+          "sha256": "b44bd9196db6646d6e037b88500631902e78db6f468a06fb2ecbe908825a6928"
+        }
+      ],
+      "columns": [
+        "delivered_reports",
+        "drop_rate",
+        "forwarded_detections",
+        "injected_drops",
+        "max_queue_depth",
+        "overflow",
+        "queue_capacity",
+        "queue_drops",
+        "service_interval_cycles",
+        "total_detections"
+      ],
+      "filters": {
+        "queue_capacities": [
+          1,
+          8,
+          64
+        ],
+        "drop_rates": [
+          "0",
+          "0.1"
+        ]
+      },
+      "sample_count": 18,
+      "aggregation": "delivered reports / 32 per Q/I/drop case",
+      "outputs": [
+        {
+          "path": "figures/figS1_robustness.pdf",
+          "sha256": "1d3aed60851c98215c0960a3b218f2bd31703270763c42bda144d7e8678d8954"
+        },
+        {
+          "path": "figures/figS1_robustness.svg",
+          "sha256": "c19bef3f361f7297363dc12bcf5d8d064981fde4ba6f453ecdb8076cb4c269d8"
+        },
+        {
+          "path": "figures/figS1_robustness.png",
+          "sha256": "1b4c029f8a254ea02179c18e0c6c017f1c39637d00d8d0551890242486188d5c"
+        },
+        {
+          "path": "figures/gray/figS1_robustness.png",
+          "sha256": "205f08250cd978f3fe3aa324fe029ca02bb2b528053b60a0f4008110a67c2b48"
+        }
+      ]
+    }
+  ]
+}

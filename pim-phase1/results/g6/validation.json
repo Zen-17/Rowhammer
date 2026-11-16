@@ -1,0 +1,19 @@
+{
+  "gate": "G6",
+  "pass": true,
+  "checks": {
+    "case_count": true,
+    "all_cases_pass": true,
+    "no_simulation_failures": true,
+    "all_acked": true,
+    "all_data_stopped": true,
+    "all_clock_advanced": true,
+    "all_refresh_not_regressed": true,
+    "synthetic_pending_frozen": true,
+    "two_channel_progress": true
+  },
+  "binary_sha256": "13cf8ab4cd178b6c01b5f60a6cdee5ed04a13076a67371b768b813b8865d5d4f",
+  "patch_sha256": "53b1887f32e40a16549f233be65003fb3d16f5795a01ebc352267efa59743c16",
+  "case_count": 16,
+  "failures": 0
+}

@@ -1,0 +1,30 @@
+{
+  "gate": "G7",
+  "pass": true,
+  "checks": {
+    "positive_case_count": true,
+    "probe_case_count": true,
+    "negative_control_count": true,
+    "status_negative_count": true,
+    "all_cases_pass": true,
+    "all_positive_outputs_bit_exact": true,
+    "all_negative_controls_caught": true,
+    "all_status_negatives_pass": true,
+    "all_five_statuses_observed": true,
+    "all_positive_versions_changed": true,
+    "all_restores_used_expected_bytes": true,
+    "report_and_probe_triggers_labeled": true,
+    "no_simulation_failures": true
+  },
+  "binary_sha256": "0bb33025dfb0b5014be91f2cfa24439071844298554acb9de251f0b07c0c5c58",
+  "patch_sha256": "d94c5cfbfbc76fefae825a0a33d29a4a9e843bbb25fd4edce94389737821be5e",
+  "case_count": 31,
+  "failures": 0,
+  "observed_statuses": [
+    "ALREADY_COMMITTED",
+    "CHECKPOINT_CORRUPT",
+    "CHECKPOINT_MISSING",
+    "STALE_HANDLE",
+    "VERSION_MISMATCH"
+  ]
+}

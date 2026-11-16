@@ -1,0 +1,29 @@
+{
+  "run_id": "0e71a82a576b5b80",
+  "group": "P1-E",
+  "group_key": "P1E",
+  "fixture": "Phase1G7Fixture.RunCase",
+  "params": {
+    "experiment": "G7",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "scenario": "POSITIVE",
+    "trigger": "REPORT",
+    "negative_control": "NONE",
+    "n_tiles": "8",
+    "seed": "3",
+    "handler_delay": "8",
+    "watchdog_cycles": "400000",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/0e71a82a576b5b80"
+  },
+  "case": {
+    "case_id": "P1E_REPORT_nt8_s3",
+    "kind": "positive",
+    "n_tiles": 8,
+    "seed": 3,
+    "trigger": "REPORT",
+    "negative_control": "NONE",
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/0e71a82a576b5b80"
+  },
+  "expected_negative": false
+}

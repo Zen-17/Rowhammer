@@ -1,0 +1,7 @@
+{
+  "path": "simulator/sim",
+  "bytes": 13878728,
+  "sha256": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e",
+  "build_command": "scons NO_STORAGE=0 NO_LIBRARY=1",
+  "storage_enabled": true
+}

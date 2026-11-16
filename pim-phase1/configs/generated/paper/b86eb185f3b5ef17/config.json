@@ -1,0 +1,21 @@
+{
+  "run_id": "b86eb185f3b5ef17",
+  "group": "P1-E",
+  "group_key": "P1E",
+  "fixture": "Phase1G7NegativeFixture.RunCase",
+  "params": {
+    "experiment": "G7",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "case": "STALE_HANDLE",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b86eb185f3b5ef17"
+  },
+  "case": {
+    "case_id": "P1E_STALE_HANDLE",
+    "kind": "status_negative",
+    "status": "STALE_HANDLE",
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b86eb185f3b5ef17"
+  },
+  "expected_negative": true,
+  "expected_status": "STALE_HANDLE"
+}

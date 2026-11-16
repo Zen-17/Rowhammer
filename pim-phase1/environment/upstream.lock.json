@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-11-15T12:28:00+00:00",
+  "repository": {
+    "url": "https://github.com/SAITPublic/PIMSimulator.git",
+    "commit": "3703d1f19c8f027360cc33a3243eb271e3bb6898",
+    "git_tree": "7ac34faf86579aca00f5b357c61b5550d1dff7e7",
+    "commit_date": "2024-07-01T20:48:44+09:00",
+    "commit_subject": "Update readme",
+    "ref_checked": "refs/heads/dev",
+    "ref_check_log": "logs/g0_ref_check.log",
+    "clone_method": "git clone --depth 1 --branch dev, then detach at fixed commit",
+    "shallow_clone": true,
+    "worktree_clean": true
+  },
+  "licenses": [
+    {
+      "path": "LICENSE-PIMSimulator",
+      "bytes": 782,
+      "sha256": "357574fbfdc45b7f944619617bc8a00ef690276d6ded0702def3feb9bc772871"
+    },
+    {
+      "path": "LICENSE-DRAMSIM2",
+      "bytes": 1783,
+      "sha256": "162a7a7ee155774e44235c670daf235cb0cda8c0171da4fc276fe89993cfd421"
+    }
+  ],
+  "original_configs": [
+    {
+      "path": "ini/HBM2_samsung_2M_16B_x64.ini",
+      "bytes": 544,
+      "sha256": "a770f3d6e1347eef0396d438859e84b7b32001dab5513e662f9bb24e4e6a3ecd"
+    },
+    {
+      "path": "system_hbm.ini",
+      "bytes": 1793,
+      "sha256": "a22b185f32341a1082607ce89ad67c3b38f90f7e5ce26ba6ec12f972236e7170"
+    },
+    {
+      "path": "system_hbm_1ch.ini",
+      "bytes": 1822,
+      "sha256": "06554c0b1fe72c491ee617ccc05147d052b0acd2a66d4cba669161970c0720e2"
+    },
+    {
+      "path": "system_hbm_64ch.ini",
+      "bytes": 1807,
+      "sha256": "d969b82501925fb5c26297feefb22a1aaa5986b87edefeee35ef8068aaff79be"
+    }
+  ],
+  "build": {
+    "command": "scons NO_STORAGE=0 NO_LIBRARY=1",
+    "storage_enabled": true,
+    "no_storage_argument": 0,
+    "no_storage_define_present": false,
+    "cxxflags": "-g -O2 -std=c++14 -Wall -Wno-reorder -Wno-sign-compare",
+    "binary": {
+      "path": "simulator/sim",
+      "bytes": 13878728,
+      "sha256": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e"
+    },
+    "build_flags_file": "environment/build_flags.txt",
+    "build_logs": [
+      {
+        "path": "logs/build_20261115T122721Z.log",
+        "bytes": 5377,
+        "sha256": "1494098261c6f2fe2ec1be8d7cfece47b3b52cab549f4b47b46daa88660293c5"
+      }
+    ]
+  },
+  "tests": {
+    "required": {
+      "xml": "runs/baseline/upstream-tests.xml",
+      "sha256": "e7be608f8df6d78204b32e3de8bf7cd71877bce25218b2f32069633747dd40a2",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0
+    },
+    "all_original_optional": {
+      "xml": "runs/baseline/upstream-all-tests.xml",
+      "sha256": "d3d832b37f1342f5d272a944c76312ebf91d7a5a5272fe67db1e3018fdaab26d",
+      "tests": 11,
+      "failures": 1,
+      "errors": 0
+    },
+    "baseline_logs": [
+      {
+        "path": "logs/baseline_20261115T122735Z.log",
+        "bytes": 2124,
+        "sha256": "f713597f2d1431ed86c44a70d57d2508b5e5ae4db4e6266459ae2c5128931c73"
+      }
+    ]
+  },
+  "python": {
+    "requirements_lock": {
+      "path": "environment/requirements.lock.txt",
+      "bytes": 467,
+      "sha256": "cc8a039b8a554f58d43775adaab01ff5cba5a20543d374360aadbfe43e0e7bf7"
+    }
+  },
+  "handoff": {
+    "path": "HANDOFF.md",
+    "bytes": 61879,
+    "sha256": "1929e0d6b8dea382cc88e0bcf4f2fa12d386dfd257e6ec5b9ee44b87261c7f9d"
+  }
+}

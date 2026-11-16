@@ -1,0 +1,13 @@
+case_id,fault_kind,hold_cycles,consumer,state,published,host_admitted,pim_admitted,host_blocked,pim_blocked,bypass_assert,internal_ce,internal_ue,delivered_reports,late_report,outcome_class,pass
+F0_h0_HOST,F0,0,HOST,PUBLISHED,True,True,True,False,False,False,0,0,0,False,NO_REPORT_PUBLISHED,True
+F0_h0_PIM,F0,0,PIM,PUBLISHED,True,True,True,False,False,False,0,0,0,False,NO_REPORT_PUBLISHED,True
+F0_h8_HOST,F0,8,HOST,PUBLISHED,True,True,True,False,False,False,0,0,0,False,NO_REPORT_PUBLISHED,True
+F0_h8_PIM,F0,8,PIM,PUBLISHED,True,True,True,False,False,False,0,0,0,False,NO_REPORT_PUBLISHED,True
+F1_h0_HOST,F1,0,HOST,SUSPECT,False,False,False,True,True,True,1,0,1,False,TIMELY_CONTROL,True
+F1_h0_PIM,F1,0,PIM,SUSPECT,False,False,False,True,True,True,1,0,1,False,TIMELY_CONTROL,True
+F1_h8_HOST,F1,8,HOST,SUSPECT,False,False,False,True,True,True,1,0,1,False,TIMELY_CONTROL,True
+F1_h8_PIM,F1,8,PIM,SUSPECT,False,False,False,True,True,True,1,0,1,False,TIMELY_CONTROL,True
+F2_h0_HOST,F2,0,HOST,POISONED,False,False,False,True,True,True,0,1,1,False,POISONED,True
+F2_h0_PIM,F2,0,PIM,POISONED,False,False,False,True,True,True,0,1,1,False,POISONED,True
+F2_h8_HOST,F2,8,HOST,POISONED,False,False,False,True,True,True,0,1,1,False,POISONED,True
+F2_h8_PIM,F2,8,PIM,POISONED,False,False,False,True,True,True,0,1,1,False,POISONED,True

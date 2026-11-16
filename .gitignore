@@ -1,0 +1,15 @@
+# Python environment and caches
+pim-phase1/.venv/
+pim-phase1/.pytest_cache/
+**/__pycache__/
+*.py[cod]
+
+# Experiment outputs
+pim-phase1/runs/
+pim-phase1/logs/
+
+# Simulator build artifacts and large input data
+pim-phase1/simulator/bin/
+pim-phase1/simulator/sim
+pim-phase1/simulator/.sconsign.dblite
+pim-phase1/simulator/data/

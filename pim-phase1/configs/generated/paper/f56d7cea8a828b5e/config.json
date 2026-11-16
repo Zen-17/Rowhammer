@@ -1,0 +1,21 @@
+{
+  "run_id": "f56d7cea8a828b5e",
+  "group": "P1-E",
+  "group_key": "P1E",
+  "fixture": "Phase1G7NegativeFixture.RunCase",
+  "params": {
+    "experiment": "G7",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "case": "CHECKPOINT_MISSING",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/f56d7cea8a828b5e"
+  },
+  "case": {
+    "case_id": "P1E_CHECKPOINT_MISSING",
+    "kind": "status_negative",
+    "status": "CHECKPOINT_MISSING",
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/f56d7cea8a828b5e"
+  },
+  "expected_negative": true,
+  "expected_status": "CHECKPOINT_MISSING"
+}

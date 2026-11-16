@@ -1,0 +1,149 @@
+{
+  "gate": "G1",
+  "pass": true,
+  "checks": {
+    "w0_bit_exact": true,
+    "w0_direct_feeder_equal": true,
+    "w1_output_bit_exact": true,
+    "w1_inputs_bit_exact": true,
+    "w1_direct_feeder_equal": true,
+    "w1_no_timeout": true,
+    "w1_queues_empty": true,
+    "w1_observed_outstanding_bound": true,
+    "address_all_pass": true,
+    "address_unique": true
+  },
+  "w0_cases": 2,
+  "w1_cases": 12,
+  "address_cases": 2,
+  "w1_cycles": [
+    {
+      "case_id": "W1_1ch_nt1_seed0_direct",
+      "cycles": 1547
+    },
+    {
+      "case_id": "W1_1ch_nt1_seed0_feeder",
+      "cycles": 2565
+    },
+    {
+      "case_id": "W1_1ch_nt1_seed1_direct",
+      "cycles": 1547
+    },
+    {
+      "case_id": "W1_1ch_nt1_seed1_feeder",
+      "cycles": 2565
+    },
+    {
+      "case_id": "W1_1ch_nt1_seed2_direct",
+      "cycles": 1547
+    },
+    {
+      "case_id": "W1_1ch_nt1_seed2_feeder",
+      "cycles": 2565
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed0_direct",
+      "cycles": 9990
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed0_feeder",
+      "cycles": 18030
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed1_direct",
+      "cycles": 9990
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed1_feeder",
+      "cycles": 18030
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed2_direct",
+      "cycles": 9990
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed2_feeder",
+      "cycles": 18030
+    }
+  ],
+  "address": [
+    {
+      "case_id": "ADDRESS_1ch",
+      "channels": 1,
+      "capacity_mb": 256,
+      "tuples": 48,
+      "unique_addresses": 48,
+      "all_rows_ok": true,
+      "summary_ok": true,
+      "summary": {
+        "channels": 1,
+        "capacity_mb": 256,
+        "banks_checked": [
+          0,
+          3,
+          15
+        ],
+        "rows_checked": [
+          0,
+          1,
+          8192,
+          16383
+        ],
+        "burst_columns_checked": [
+          0,
+          1,
+          16,
+          31
+        ],
+        "burst_bytes": 32,
+        "address_bits": 28,
+        "tuples": 48,
+        "unique_addresses": 48,
+        "roundtrip_pass": 48,
+        "upstream_decoder_pass": 48,
+        "all_pass": true
+      },
+      "csv_sha256": "ae083dcb2e0d5712e246b7f1fce84e73b2745d709a3736d9148c06adca69ce52",
+      "all_pass": true
+    },
+    {
+      "case_id": "ADDRESS_2ch",
+      "channels": 2,
+      "capacity_mb": 512,
+      "tuples": 96,
+      "unique_addresses": 96,
+      "all_rows_ok": true,
+      "summary_ok": true,
+      "summary": {
+        "channels": 2,
+        "capacity_mb": 512,
+        "banks_checked": [
+          0,
+          3,
+          15
+        ],
+        "rows_checked": [
+          0,
+          1,
+          8192,
+          16383
+        ],
+        "burst_columns_checked": [
+          0,
+          1,
+          16,
+          31
+        ],
+        "burst_bytes": 32,
+        "address_bits": 29,
+        "tuples": 96,
+        "unique_addresses": 96,
+        "roundtrip_pass": 96,
+        "upstream_decoder_pass": 96,
+        "all_pass": true
+      },
+      "csv_sha256": "b82caa48dcfac312ecb17565c944411dbce8e322b069c76269def31d06fcc389",
+      "all_pass": true
+    }
+  ]
+}

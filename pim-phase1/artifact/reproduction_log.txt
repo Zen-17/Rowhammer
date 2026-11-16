@@ -1,0 +1,30 @@
+HBM-PIM Phase 1 artifact reproduction log
+generated_utc=2026-11-15T15:46:09+00:00
+upstream_commit=3703d1f19c8f027360cc33a3243eb271e3bb6898
+upstream_tree=7ac34faf86579aca00f5b357c61b5550d1dff7e7
+g8_binary=ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082
+g8_patch=93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192
+environment_hash=9bd07d55353ada1ef0f6a2f96a41e816caaf806fc048f19f0477e557829af90e
+python=see environment/environment.txt
+
+Smoke replay:
+  bash scripts/reproduce.sh --smoke
+
+Paper replay:
+  bash scripts/reproduce.sh --paper
+
+Build:
+  cd simulator && scons NO_STORAGE=0 NO_LIBRARY=1
+
+G8 paper matrix:
+  .venv/bin/python scripts/calibrate_g8.py
+  .venv/bin/python scripts/expand_suite.py --suite configs/suite_paper.yaml
+  .venv/bin/python scripts/run_suite.py --manifest configs/generated/paper-manifest.json --jobs 8
+  .venv/bin/python scripts/aggregate.py --runs runs/paper --out results
+  .venv/bin/python scripts/plot_paper.py --results results --out figures
+
+The artifact excludes .venv, simulator/.git, simulator/bin, simulator/lib,
+per-case generated config duplicates, and previous archives. The SHA256
+manifest does not include itself, ARCHIVE.sha256, or the archive.
+README.md is included in the archive but omitted from MANIFEST.sha256
+because the external README carries the archive hash.

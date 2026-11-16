@@ -1,0 +1,39 @@
+{
+  "gate": "G2",
+  "pass": true,
+  "checks": {
+    "nt1_ext_off_on_cycles": true,
+    "nt1_ext_off_g1_cycles": true,
+    "nt1_ext_off_on_output": true,
+    "nt1_ext_off_g1_output": true,
+    "nt8_ext_off_on_cycles": true,
+    "nt8_ext_off_g1_cycles": true,
+    "nt8_ext_off_on_output": true,
+    "nt8_ext_off_g1_output": true
+  },
+  "sim_failures": 0,
+  "comparisons": [
+    {
+      "case_id": "W1_1ch_nt1_seed0",
+      "ext_off_cycles": 2565,
+      "ext_on_cycles": 2565,
+      "g1_feeder_cycles": 2565,
+      "cycles_ext_equal": true,
+      "cycles_match_g1": true,
+      "output_ext_equal": true,
+      "output_match_g1": true
+    },
+    {
+      "case_id": "W1_1ch_nt8_seed0",
+      "ext_off_cycles": 18030,
+      "ext_on_cycles": 18030,
+      "g1_feeder_cycles": 18030,
+      "cycles_ext_equal": true,
+      "cycles_match_g1": true,
+      "output_ext_equal": true,
+      "output_match_g1": true
+    }
+  ],
+  "binary_sha256": "f54c8abded3c9a373e79a7798f6c1234b5bd1c006ddd6907c4127d053499a8d8",
+  "patch_sha256": "2b7b65bab048e44160c9ef04ef8cd59e68ea2acc6a7cd950ec35da23d40dc0ec"
+}

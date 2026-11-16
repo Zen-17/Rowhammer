@@ -1,0 +1,4747 @@
+diff --git a/src/Bank.cpp b/src/Bank.cpp
+index 63644e1..c5caac6 100644
+--- a/src/Bank.cpp
++++ b/src/Bank.cpp
+@@ -30,7 +30,9 @@
+ 
+ #include "Bank.h"
+ 
++#include <cstring>
+ #include <memory>
++#include <stdexcept>
+ 
+ #include "BusPacket.h"
+ 
+@@ -76,58 +78,195 @@ shared_ptr<Bank::DataStruct> Bank::searchForRow(unsigned row, shared_ptr<DataStr
+     return NULL;
+ }
+ 
+-void Bank::read(BusPacket* busPacket)
++void Bank::read(BusPacket* busPacket, Phase1AccessType access, uint64_t cycle)
+ {
++    dataAccessCount_++;
+     shared_ptr<DataStruct> rowHeadNode = rowEntries[busPacket->column];
+     shared_ptr<DataStruct> foundNode = NULL;
+     if ((foundNode = Bank::searchForRow(busPacket->row, rowHeadNode)) == NULL)
+     {
++        return;
+     }
+-    else  // found it
++
++    if (profile_ == Phase1Profile::NATIVE || !eccEnabled(access))
++    {
++        if (profile_ == Phase1Profile::HOST_ONLY && access != Phase1AccessType::HOST)
++        {
++            // PIM/HAB read path in HOST_ONLY: raw storage, no decoder.
++            for (unsigned cw = 0; cw < 4; cw++)
++            {
++                Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row,
++                                        busPacket->column, cw};
++                if (!phase1Storage_.contains(key))
++                    return;
++                const uint64_t word = phase1Storage_.readRawData(key);
++                std::memcpy(&busPacket->data->u8Data_[cw * 8], &word, sizeof(word));
++            }
++        }
++        else
++        {
++            *(busPacket->data) = foundNode->data;
++        }
++        return;
++    }
++
++    for (unsigned cw = 0; cw < 4; cw++)
+     {
+-        *(busPacket->data) = foundNode->data;
++        Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row, busPacket->column,
++                                cw};
++        if (!phase1Storage_.contains(key))
++            return;
++        const Phase1EccResult result = phase1Storage_.readProtected(key);
++        if (result.status == Phase1EccStatus::CLEAN ||
++            result.status == Phase1EccStatus::CORRECTED ||
++            result.status == Phase1EccStatus::UNCORRECTABLE)
++        {
++            std::memcpy(&busPacket->data->u8Data_[cw * 8], &result.data, sizeof(result.data));
++        }
++        if (result.status == Phase1EccStatus::CORRECTED ||
++            result.status == Phase1EccStatus::UNCORRECTABLE)
++        {
++            Phase1Detection detection;
++            detection.detect_cycle = cycle;
++            detection.channel = channel_;
++            detection.rank = rank_;
++            detection.actual_bank = actualBank_;
++            detection.row = busPacket->row;
++            detection.burst_column = busPacket->column;
++            detection.codeword_index = cw;
++            detection.status = result.status;
++            detection.access = access;
++            reportDetection(detection);
++        }
++        if (result.status == Phase1EccStatus::CORRECTED &&
++            busPacket->phase1_status == Phase1PacketStatus::OK)
++            busPacket->phase1_status = Phase1PacketStatus::CORRECTED;
++        if (result.status == Phase1EccStatus::UNPROTECTED_FORMAT)
++        {
++            Phase1FormatEvent event;
++            event.detect_cycle = cycle;
++            event.channel = channel_;
++            event.rank = rank_;
++            event.actual_bank = actualBank_;
++            event.row = busPacket->row;
++            event.burst_column = busPacket->column;
++            event.codeword_index = cw;
++            event.access = access;
++            reportFormat(event);
++            if (static_cast<int>(busPacket->phase1_status) <
++                static_cast<int>(Phase1PacketStatus::UNPROTECTED_FORMAT))
++                busPacket->phase1_status = Phase1PacketStatus::UNPROTECTED_FORMAT;
++        }
++        if (result.status == Phase1EccStatus::UNCORRECTABLE)
++            busPacket->phase1_status = Phase1PacketStatus::UNCORRECTABLE;
+     }
+ }
+ 
+-void Bank::write(const BusPacket* busPacket)
++void Bank::write(const BusPacket* busPacket, Phase1AccessType access, uint64_t cycle)
+ {
+-    // TODO: move all the error checking to BusPacket so once we have a bus
+-    // packet,
+-    //            we know the fields are all legal
+-
++    (void)cycle;
++    dataAccessCount_++;
+     if (busPacket->column >= numCols)
+     {
+         ERROR("== Error - Bus Packet column " << busPacket->column << " out of bounds");
+         exit(-1);
+     }
+ 
+-    // head of the list we need to search
+     shared_ptr<DataStruct> rowHeadNode = rowEntries[busPacket->column];
+     shared_ptr<DataStruct> foundNode = NULL;
+     if ((foundNode = Bank::searchForRow(busPacket->row, rowHeadNode)) == NULL)
+     {
+-        // not found
+         shared_ptr<DataStruct> newRowNode = make_shared<DataStruct>();
+-        // DataStruct* newRowNode = (DataStruct*)malloc(sizeof(DataStruct));
+-
+-        // insert at the head for speed
+-        // TODO: Optimize this data structure for speedier lookups?
+         newRowNode->row = busPacket->row;
+         if (busPacket->data)
+             newRowNode->data = *(busPacket->data);
+         newRowNode->next = rowHeadNode;
+         rowEntries[busPacket->column] = newRowNode;
++        foundNode = newRowNode;
+     }
+     else
+     {
+-        // found it, just plaster in the new data
+         foundNode->data = *(busPacket->data);
+-        if (DEBUG_BANKS)
+-        {
+-            PRINTN(" -- Bank " << busPacket->bank << " writing to physical address 0x" << hex
+-                               << busPacket->physicalAddress << dec << ":");
+-            busPacket->printData();
+-            PRINT("");
+-        }
+     }
++
++    if (profile_ == Phase1Profile::NATIVE)
++        return;
++
++    const bool protect = eccEnabled(access);
++    for (unsigned cw = 0; cw < 4; cw++)
++    {
++        uint64_t word = 0;
++        std::memcpy(&word, &busPacket->data->u8Data_[cw * 8], sizeof(word));
++        Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row, busPacket->column,
++                                cw};
++        if (protect)
++            phase1Storage_.writeLegal(key, word);
++        else
++            phase1Storage_.writeUnprotected(key, word);
++    }
++}
++
++void Bank::setIdentity(unsigned channel, unsigned rank, unsigned actual_bank)
++{
++    channel_ = channel;
++    rank_ = rank;
++    actualBank_ = actual_bank;
++}
++
++void Bank::setPhase1(Phase1Profile profile, Phase1ReportSink* reportSink)
++{
++    profile_ = profile;
++    reportSink_ = reportSink;
++}
++
++bool Bank::eccEnabled(Phase1AccessType access) const
++{
++    switch (profile_)
++    {
++        case Phase1Profile::NATIVE:
++            return false;
++        case Phase1Profile::LOCAL_VISIBLE:
++        case Phase1Profile::LOCAL_HIDDEN:
++            return true;
++        case Phase1Profile::HOST_ONLY:
++            return access == Phase1AccessType::HOST;
++    }
++    return false;
++}
++
++void Bank::reportDetection(const Phase1Detection& detection) const
++{
++    if (reportSink_ != nullptr && profile_ != Phase1Profile::NATIVE)
++        reportSink_->onDetected(detection);
++}
++
++void Bank::reportFormat(const Phase1FormatEvent& event) const
++{
++    if (reportSink_ != nullptr && profile_ != Phase1Profile::NATIVE)
++        reportSink_->onUnprotectedFormat(event);
++}
++
++void Bank::injectRawDataBit(unsigned row, unsigned burstColumn, unsigned bitInBurst)
++{
++    if (bitInBurst >= 256)
++        throw std::out_of_range("Bank raw data bit must be in [0,255]");
++    if (profile_ == Phase1Profile::NATIVE)
++    {
++        shared_ptr<DataStruct> head = rowEntries[burstColumn];
++        shared_ptr<DataStruct> node = searchForRow(row, head);
++        if (node == NULL)
++            throw std::out_of_range("Bank raw row/column not initialized");
++        node->data.u8Data_[bitInBurst / 8] ^= static_cast<uint8_t>(1u << (bitInBurst % 8));
++        return;
++    }
++    Phase1StorageKey key = {channel_, rank_, actualBank_, row, burstColumn, bitInBurst / 64};
++    phase1Storage_.injectDataBit(key, bitInBurst % 64);
++}
++
++void Bank::injectRawParityBit(unsigned row, unsigned burstColumn, unsigned codeword, unsigned bit)
++{
++    if (profile_ == Phase1Profile::NATIVE)
++        throw std::logic_error("NATIVE profile has no ECC parity metadata");
++    Phase1StorageKey key = {channel_, rank_, actualBank_, row, burstColumn, codeword};
++    phase1Storage_.injectParityBit(key, bit);
+ }
+diff --git a/src/Bank.h b/src/Bank.h
+index db8ef23..67aa065 100644
+--- a/src/Bank.h
++++ b/src/Bank.h
+@@ -38,6 +38,9 @@
+ #include "BankState.h"
+ #include "Burst.h"
+ #include "BusPacket.h"
++#include "Phase1Profile.h"
++#include "Phase1Reports.h"
++#include "Phase1Storage.h"
+ #include "SimulatorObject.h"
+ #include "SystemConfiguration.h"
+ 
+@@ -56,8 +59,16 @@ class Bank
+     // functions
+     Bank(ostream& simLog);
+ 
+-    void read(BusPacket* busPacket);
+-    void write(const BusPacket* busPacket);
++    void read(BusPacket* busPacket, Phase1AccessType access = Phase1AccessType::HOST,
++              uint64_t cycle = 0);
++    void write(const BusPacket* busPacket, Phase1AccessType access = Phase1AccessType::HOST,
++               uint64_t cycle = 0);
++
++    void setIdentity(unsigned channel, unsigned rank, unsigned actual_bank);
++    void setPhase1(Phase1Profile profile, Phase1ReportSink* reportSink);
++    void injectRawDataBit(unsigned row, unsigned burstColumn, unsigned bitInBurst);
++    void injectRawParityBit(unsigned row, unsigned burstColumn, unsigned codeword, unsigned bit);
++    uint64_t dataAccessCount() const { return dataAccessCount_; }
+     BankState currentState;
+ 
+   private:
+@@ -65,7 +76,17 @@ class Bank
+     std::vector<std::shared_ptr<DataStruct>> rowEntries;
+     ostream& dramsimLog;
+     static std::shared_ptr<DataStruct> searchForRow(unsigned row, std::shared_ptr<DataStruct> head);
++    bool eccEnabled(Phase1AccessType access) const;
++    void reportDetection(const Phase1Detection& detection) const;
++    void reportFormat(const Phase1FormatEvent& event) const;
+     unsigned numCols;
++    unsigned channel_ = 0;
++    unsigned rank_ = 0;
++    unsigned actualBank_ = 0;
++    Phase1Profile profile_ = Phase1Profile::NATIVE;
++    Phase1ReportSink* reportSink_ = nullptr;
++    Phase1Storage phase1Storage_;
++    uint64_t dataAccessCount_ = 0;
+ };
+ }  // namespace DRAMSim
+ 
+diff --git a/src/BusPacket.h b/src/BusPacket.h
+index 15fc201..c5f3be2 100644
+--- a/src/BusPacket.h
++++ b/src/BusPacket.h
+@@ -34,6 +34,7 @@
+ #include <string>
+ 
+ #include "Burst.h"
++#include "Phase1Profile.h"
+ #include "SystemConfiguration.h"
+ 
+ namespace DRAMSim
+@@ -64,6 +65,7 @@ class BusPacket
+     uint64_t physicalAddress;
+     BurstType* data;
+     std::string tag;
++    Phase1PacketStatus phase1_status = Phase1PacketStatus::OK;
+ 
+     // Functions
+     BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r,
+diff --git a/src/MultiChannelMemorySystem.cpp b/src/MultiChannelMemorySystem.cpp
+index 4b1c936..e6e482d 100644
+--- a/src/MultiChannelMemorySystem.cpp
++++ b/src/MultiChannelMemorySystem.cpp
+@@ -576,7 +576,7 @@ void MultiChannelMemorySystem::RegisterCallbacks(
+     }
+ }
+ 
+-int MultiChannelMemorySystem::hasPendingTransactions()
++int MultiChannelMemorySystem::hasPendingTransactions() const
+ {
+     int num = 0;
+     for (auto chan : channels)
+diff --git a/src/MultiChannelMemorySystem.h b/src/MultiChannelMemorySystem.h
+index f2ab86c..cb73b8c 100644
+--- a/src/MultiChannelMemorySystem.h
++++ b/src/MultiChannelMemorySystem.h
+@@ -58,7 +58,7 @@ class MultiChannelMemorySystem : public MemoryObject
+     virtual bool addTransaction(bool isWrite, uint64_t addr, const std::string& tag,
+                                 BurstType* data);
+ 
+-    bool addBarrier(int chanId);
++    virtual bool addBarrier(int chanId);
+ 
+     void update();
+     void printStats(bool finalStats = false);
+@@ -74,7 +74,7 @@ class MultiChannelMemorySystem : public MemoryObject
+     void InitOutputFiles(string tracefilename);
+     void setCPUClockSpeed(uint64_t cpuClkFreqHz);
+ 
+-    int hasPendingTransactions();
++    int hasPendingTransactions() const;
+ 
+     bool willAcceptTransaction(uint64_t addr);
+     bool willAcceptTransaction();
+diff --git a/src/PIMRank.cpp b/src/PIMRank.cpp
+index fdb690a..4e141ad 100644
+--- a/src/PIMRank.cpp
++++ b/src/PIMRank.cpp
+@@ -154,7 +154,7 @@ void PIMRank::readHab(BusPacket* packet)
+         int grf_id = getGrfIdx(packet->column);
+         for (int pb = 0; pb < config.NUM_PIM_BLOCKS; pb++)
+         {
+-            rank->banks[pb * 2 + packet->bank].read(packet);
++            rank->banks[pb * 2 + packet->bank].read(packet, Phase1AccessType::HAB, currentClockCycle);
+             pimBlocks[pb].grfB[grf_id] = *(packet->data);
+         }
+ #endif
+@@ -215,12 +215,12 @@ void PIMRank::writeHab(BusPacket* packet)
+             if (packet->bank == 0)
+             {
+                 *(packet->data) = pimBlocks[pb].grfA[grf_id];
+-                rank->banks[pb * 2].write(packet);  // basically read from bank;
++                rank->banks[pb * 2].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank;
+             }
+             else if (packet->bank == 1)
+             {
+                 *(packet->data) = pimBlocks[pb].grfB[grf_id];
+-                rank->banks[pb * 2 + 1].write(packet);  // basically read from bank.
++                rank->banks[pb * 2 + 1].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank.
+             }
+         }
+ #endif
+@@ -243,13 +243,13 @@ void PIMRank::readOpd(int pb, BurstType& bst, PIMOpdType type, BusPacket* packet
+         case PIMOpdType::EVEN_BANK:
+             if (packet->bank % 2 != 0)
+                 PRINT("Warning, CRF bank coding and bank id from packet are inconsistent");
+-            rank->banks[pb * 2].read(packet);  // basically read from bank.
++            rank->banks[pb * 2].read(packet, Phase1AccessType::PIM_OPERAND, currentClockCycle);  // basically read from bank.
+             bst = *(packet->data);
+             return;
+         case PIMOpdType::ODD_BANK:
+             if (packet->bank % 2 == 0)
+                 PRINT("Warning, CRF bank coding and bank id from packet are inconsistent");
+-            rank->banks[pb * 2 + 1].read(packet);  // basically read from bank.
++            rank->banks[pb * 2 + 1].read(packet, Phase1AccessType::PIM_OPERAND, currentClockCycle);  // basically read from bank.
+             bst = *(packet->data);
+             return;
+         case PIMOpdType::GRF_A:
+@@ -290,7 +290,7 @@ void PIMRank::writeOpd(int pb, BurstType& bst, PIMOpdType type, BusPacket* packe
+                 PRINT("CRF bank coding and bank id from packet are inconsistent");
+             }
+             *(packet->data) = bst;
+-            rank->banks[pb * 2].write(packet);  // basically read from bank.
++            rank->banks[pb * 2].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank.
+             return;
+         case PIMOpdType::ODD_BANK:
+             if (packet->bank % 2 == 0)
+@@ -299,7 +299,7 @@ void PIMRank::writeOpd(int pb, BurstType& bst, PIMOpdType type, BusPacket* packe
+                 exit(-1);
+             }
+             *(packet->data) = bst;
+-            rank->banks[pb * 2 + 1].write(packet);  // basically read from bank.
++            rank->banks[pb * 2 + 1].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank.
+             return;
+         case PIMOpdType::GRF_A:
+             pimBlocks[pb].grfA[(is_auto) ? getGrfIdx(packet->column) : idx] = bst;
+@@ -477,12 +477,12 @@ void PIMRank::doPIMBlock(BusPacket* packet, PIMCmd cCmd, int pimblock_id)
+         if (packet->bank == 0)
+         {
+             *(packet->data) = pimBlocks[pimblock_id].grfA[grf_id];
+-            rank->banks[pimblock_id * 2].write(packet);  // basically read from bank;
++            rank->banks[pimblock_id * 2].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank;
+         }
+         else if (packet->bank == 1)
+         {
+             *(packet->data) = pimBlocks[pimblock_id].grfB[grf_id];
+-            rank->banks[pimblock_id * 2 + 1].write(packet);  // basically read from bank.
++            rank->banks[pimblock_id * 2 + 1].write(packet, Phase1AccessType::PIM_RESULT, currentClockCycle);  // basically read from bank.
+         }
+     }
+ }
+diff --git a/src/Phase1Address.cpp b/src/Phase1Address.cpp
+new file mode 100644
+index 0000000..02cb9f6
+--- /dev/null
++++ b/src/Phase1Address.cpp
+@@ -0,0 +1,138 @@
++#include "Phase1Address.h"
++
++#include <sstream>
++#include <stdexcept>
++
++#include "SystemConfiguration.h"
++#include "Utils.h"
++
++namespace DRAMSim
++{
++bool Phase1Geometry::valid() const
++{
++    if (num_channels == 0 || num_ranks == 0 || num_banks == 0 || num_bank_groups == 0 ||
++        num_rows == 0 || num_cols == 0 || burst_length == 0 || jedec_data_bus_bits == 0)
++        return false;
++    if (!isPowerOfTwo(num_channels) || !isPowerOfTwo(num_ranks) || !isPowerOfTwo(num_banks) ||
++        !isPowerOfTwo(num_bank_groups) || !isPowerOfTwo(num_rows) || !isPowerOfTwo(num_cols) ||
++        !isPowerOfTwo(burst_length))
++        return false;
++    if (num_banks % num_bank_groups != 0)
++        return false;
++    if (num_cols % burst_length != 0)
++        return false;
++    if ((jedec_data_bus_bits % 8) != 0 || (burst_length * jedec_data_bus_bits) % 8 != 0)
++        return false;
++    if (num_bank_groups > num_banks)
++        return false;
++    return true;
++}
++
++Phase1Address::Phase1Address(const Phase1Geometry& geometry) : geometry_(geometry)
++{
++    if (!geometry_.valid())
++        throw std::invalid_argument("invalid Phase1Geometry");
++    deriveBitWidths();
++}
++
++uint64_t Phase1Address::mask(unsigned bits)
++{
++    if (bits == 0)
++        return 0;
++    if (bits >= 64)
++        return ~uint64_t(0);
++    return (uint64_t(1) << bits) - 1;
++}
++
++void Phase1Address::deriveBitWidths()
++{
++    channel_bits_ = uLog2(geometry_.num_channels);
++    rank_bits_ = uLog2(geometry_.num_ranks);
++    bank_bits_ = uLog2(geometry_.num_banks);
++    bankgroup_bits_ = uLog2(geometry_.num_bank_groups);
++    bank_within_group_bits_ = bank_bits_ - bankgroup_bits_;
++    row_bits_ = uLog2(geometry_.num_rows);
++    column_bits_ = uLog2(geometry_.num_cols / geometry_.burst_length);
++    offset_bits_ = uLog2(geometry_.burst_bytes());
++}
++
++bool Phase1Address::inRange(const Phase1AddrTuple& tuple) const
++{
++    if (tuple.channel >= geometry_.num_channels || tuple.rank >= geometry_.num_ranks ||
++        tuple.bank >= geometry_.num_banks || tuple.row >= geometry_.num_rows ||
++        tuple.burst_column >= geometry_.burst_columns())
++        return false;
++    return true;
++}
++
++uint64_t Phase1Address::encode(const Phase1AddrTuple& tuple) const
++{
++    if (!inRange(tuple))
++        throw std::out_of_range("Phase1AddrTuple outside geometry");
++    const unsigned bank_within_group = tuple.bank & ((1u << bank_within_group_bits_) - 1u);
++    const unsigned bank_group = tuple.bank >> bank_within_group_bits_;
++
++    uint64_t address = tuple.rank & mask(rank_bits_);
++    address = (address << row_bits_) | (tuple.row & mask(row_bits_));
++    address = (address << column_bits_) | (tuple.burst_column & mask(column_bits_));
++    address = (address << bankgroup_bits_) | (bank_group & mask(bankgroup_bits_));
++    address = (address << bank_within_group_bits_) | bank_within_group;
++    address = (address << channel_bits_) | (tuple.channel & mask(channel_bits_));
++    address = (address << offset_bits_);
++    return address;
++}
++
++Phase1AddrTuple Phase1Address::decode(uint64_t address) const
++{
++    Phase1AddrTuple tuple;
++    uint64_t value = address;
++    const uint64_t offset = value & mask(offset_bits_);
++    value >>= offset_bits_;
++    tuple.channel = static_cast<unsigned>(value & mask(channel_bits_));
++    value >>= channel_bits_;
++    const unsigned bank_within_group = static_cast<unsigned>(value & mask(bank_within_group_bits_));
++    value >>= bank_within_group_bits_;
++    const unsigned bank_group = static_cast<unsigned>(value & mask(bankgroup_bits_));
++    value >>= bankgroup_bits_;
++    tuple.burst_column = static_cast<unsigned>(value & mask(column_bits_));
++    value >>= column_bits_;
++    tuple.row = static_cast<unsigned>(value & mask(row_bits_));
++    value >>= row_bits_;
++    tuple.rank = static_cast<unsigned>(value & mask(rank_bits_));
++    value >>= rank_bits_;
++    tuple.bank = (bank_group << bank_within_group_bits_) | bank_within_group;
++    if (offset != 0 || value != 0)
++        throw std::out_of_range("Phase1 address has non-zero offset or high bits");
++    return tuple;
++}
++
++uint64_t Phase1Address::addressMask() const
++{
++    const unsigned total_bits = channel_bits_ + rank_bits_ + bank_bits_ + row_bits_ +
++                                column_bits_ + offset_bits_;
++    return mask(total_bits);
++}
++
++Phase1Geometry Phase1Address::fromConfiguration()
++{
++    Phase1Geometry geometry;
++    geometry.num_channels = getConfigParam(UINT, "NUM_CHANS");
++    geometry.num_ranks = getConfigParam(UINT, "NUM_RANKS");
++    geometry.num_banks = getConfigParam(UINT, "NUM_BANKS");
++    geometry.num_bank_groups = getConfigParam(UINT, "NUM_BANK_GROUPS");
++    geometry.num_rows = getConfigParam(UINT, "NUM_ROWS");
++    geometry.num_cols = getConfigParam(UINT, "NUM_COLS");
++    geometry.burst_length = getConfigParam(UINT, "BL");
++    geometry.jedec_data_bus_bits = getConfigParam(UINT, "JEDEC_DATA_BUS_BITS");
++    return geometry;
++}
++
++std::string phase1AddrToString(const Phase1AddrTuple& tuple)
++{
++    std::ostringstream os;
++    os << "ch=" << tuple.channel << ",rank=" << tuple.rank << ",bank=" << tuple.bank
++       << ",row=" << tuple.row << ",burst_col=" << tuple.burst_column;
++    return os.str();
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Address.h b/src/Phase1Address.h
+new file mode 100644
+index 0000000..fc4bdf9
+--- /dev/null
++++ b/src/Phase1Address.h
+@@ -0,0 +1,83 @@
++#ifndef PHASE1_ADDRESS_H
++#define PHASE1_ADDRESS_H
++
++#include <cstdint>
++#include <string>
++
++namespace DRAMSim
++{
++// A Scheme8 address tuple.  The column is the 32 B burst-column index used by
++// BusPacket/Bank, not the raw JEDEC column.
++struct Phase1AddrTuple
++{
++    unsigned channel = 0;
++    unsigned rank = 0;
++    unsigned bank = 0;
++    unsigned row = 0;
++    unsigned burst_column = 0;
++
++    bool operator==(const Phase1AddrTuple& rhs) const
++    {
++        return channel == rhs.channel && rank == rhs.rank && bank == rhs.bank && row == rhs.row &&
++               burst_column == rhs.burst_column;
++    }
++    bool operator!=(const Phase1AddrTuple& rhs) const { return !(*this == rhs); }
++};
++
++struct Phase1Geometry
++{
++    unsigned num_channels = 0;
++    unsigned num_ranks = 0;
++    unsigned num_banks = 0;
++    unsigned num_bank_groups = 0;
++    unsigned num_rows = 0;
++    unsigned num_cols = 0;
++    unsigned burst_length = 0;
++    unsigned jedec_data_bus_bits = 0;
++
++    unsigned burst_bytes() const { return burst_length * jedec_data_bus_bits / 8; }
++    unsigned burst_columns() const { return num_cols / burst_length; }
++    bool valid() const;
++};
++
++// Encode/decode the fixed upstream Scheme8 layout used by PIMAddrManager:
++// rank:row:col:bg:bank_within_group:channel:byte_offset.
++//
++// This is a Phase1 test/address utility.  It is an explicit model-side
++// assumption, not a claim that the upstream simulator exposes a general
++// tuple->address API.  Round-trip tests compare it with the upstream
++// AddrMapping::addressMapping decoder.
++class Phase1Address
++{
++  public:
++    explicit Phase1Address(const Phase1Geometry& geometry);
++
++    uint64_t encode(const Phase1AddrTuple& tuple) const;
++    Phase1AddrTuple decode(uint64_t address) const;
++    bool inRange(const Phase1AddrTuple& tuple) const;
++
++    const Phase1Geometry& geometry() const { return geometry_; }
++    uint64_t addressMask() const;
++
++    static Phase1Geometry fromConfiguration();
++
++  private:
++    Phase1Geometry geometry_;
++    unsigned channel_bits_ = 0;
++    unsigned rank_bits_ = 0;
++    unsigned bank_bits_ = 0;
++    unsigned bankgroup_bits_ = 0;
++    unsigned bank_within_group_bits_ = 0;
++    unsigned row_bits_ = 0;
++    unsigned column_bits_ = 0;
++    unsigned offset_bits_ = 0;
++
++    static uint64_t mask(unsigned bits);
++    void deriveBitWidths();
++};
++
++std::string phase1AddrToString(const Phase1AddrTuple& tuple);
++
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Driver.cpp b/src/Phase1Driver.cpp
+new file mode 100644
+index 0000000..7f81a3f
+--- /dev/null
++++ b/src/Phase1Driver.cpp
+@@ -0,0 +1,202 @@
++#include "Phase1Driver.h"
++
++#include <algorithm>
++#include <fstream>
++#include <sstream>
++#include <stdexcept>
++#include <unordered_set>
++
++#include "Utils.h"
++
++namespace DRAMSim
++{
++namespace
++{
++std::string trim(const std::string& input)
++{
++    const std::string whitespace = " \t\r\n";
++    const std::size_t first = input.find_first_not_of(whitespace);
++    if (first == std::string::npos)
++        return "";
++    const std::size_t last = input.find_last_not_of(whitespace);
++    return input.substr(first, last - first + 1);
++}
++
++unsigned parseUnsigned(const std::string& key, const std::string& value)
++{
++    try
++    {
++        std::size_t consumed = 0;
++        const unsigned long parsed = std::stoul(value, &consumed);
++        if (consumed != value.size())
++            throw std::invalid_argument("trailing characters");
++        return static_cast<unsigned>(parsed);
++    }
++    catch (const std::exception&)
++    {
++        throw std::runtime_error("invalid unsigned parameter " + key + "=" + value);
++    }
++}
++
++uint64_t parseUint64(const std::string& key, const std::string& value)
++{
++    try
++    {
++        std::size_t consumed = 0;
++        const unsigned long long parsed = std::stoull(value, &consumed);
++        if (consumed != value.size())
++            throw std::invalid_argument("trailing characters");
++        return static_cast<uint64_t>(parsed);
++    }
++    catch (const std::exception&)
++    {
++        throw std::runtime_error("invalid uint64 parameter " + key + "=" + value);
++    }
++}
++}  // namespace
++
++Phase1RunConfig loadPhase1Config(const std::string& path)
++{
++    std::ifstream input(path);
++    if (!input)
++        throw std::runtime_error("cannot open Phase1 config: " + path);
++
++    std::map<std::string, std::string> values;
++    static const std::unordered_set<std::string> allowed = {
++        "schema_version", "experiment", "workload", "mode", "device_ini", "system_ini",
++        "channels", "ranks", "capacity_mb", "n_tiles", "seed", "feeder_outstanding_limit",
++        "feeder_issue_per_cycle", "watchdog_cycles", "dim_bursts", "elements", "output_dir",
++        "trace_mode"};
++    std::string line;
++    unsigned lineNumber = 0;
++    while (std::getline(input, line))
++    {
++        lineNumber++;
++        line = trim(line);
++        if (line.empty() || line[0] == ';' || line[0] == '#')
++            continue;
++        const std::size_t equal = line.find('=');
++        if (equal == std::string::npos)
++            throw std::runtime_error("malformed Phase1 config line " + std::to_string(lineNumber));
++        const std::string key = trim(line.substr(0, equal));
++        const std::string value = trim(line.substr(equal + 1));
++        if (allowed.count(key) == 0)
++            throw std::runtime_error("unknown Phase1 config key: " + key);
++        values[key] = value;
++    }
++
++    auto require = [&](const std::string& key) -> const std::string& {
++        auto it = values.find(key);
++        if (it == values.end())
++            throw std::runtime_error("missing Phase1 config key: " + key);
++        return it->second;
++    };
++
++    Phase1RunConfig config;
++    config.experiment = require("experiment");
++    config.workload = require("workload");
++    config.mode = require("mode");
++    config.device_ini = require("device_ini");
++    config.system_ini = require("system_ini");
++    auto traceIt = values.find("trace_mode");
++    config.trace_mode = (traceIt == values.end()) ? "ext_off" : traceIt->second;
++    config.channels = parseUnsigned("channels", require("channels"));
++    config.ranks = parseUnsigned("ranks", require("ranks"));
++    config.capacity_mb = parseUnsigned("capacity_mb", require("capacity_mb"));
++    config.n_tiles = parseUnsigned("n_tiles", require("n_tiles"));
++    config.seed = parseUnsigned("seed", require("seed"));
++    config.feeder_outstanding_limit =
++        parseUnsigned("feeder_outstanding_limit", require("feeder_outstanding_limit"));
++    config.feeder_issue_per_cycle =
++        parseUnsigned("feeder_issue_per_cycle", require("feeder_issue_per_cycle"));
++    config.watchdog_cycles = parseUint64("watchdog_cycles", require("watchdog_cycles"));
++
++    if (config.mode != "direct" && config.mode != "feeder")
++        throw std::runtime_error("mode must be direct or feeder");
++    if (config.trace_mode != "ext_off" && config.trace_mode != "ext_on")
++        throw std::runtime_error("trace_mode must be ext_off or ext_on");
++    if (config.workload != "W0" && config.workload != "W1" && config.workload != "ADDRESS")
++        throw std::runtime_error("workload must be W0, W1, or ADDRESS");
++    if (config.channels != 1 && config.channels != 2)
++        throw std::runtime_error("G1 supports only 1 or 2 channels");
++    if (config.ranks != 1)
++        throw std::runtime_error("G1 supports exactly 1 rank per channel");
++    if (config.feeder_issue_per_cycle != 1)
++        throw std::runtime_error("G1 feeder issue rate must be 1");
++    if (config.watchdog_cycles == 0)
++        throw std::runtime_error("watchdog_cycles must be non-zero");
++    if (config.workload == "W1" && config.n_tiles != 1 && config.n_tiles != 8)
++        throw std::runtime_error("G1 W1 requires n_tiles 1 or 8");
++
++    return config;
++}
++
++bool Phase1Driver::directIdle(const MultiChannelMemorySystem& memory)
++{
++    if (memory.hasPendingTransactions() != 0)
++        return false;
++    for (const MemorySystem* channel : memory.channels)
++    {
++        if (channel == nullptr || !channel->pendingTransactions.empty())
++            return false;
++        if (channel->memoryController == nullptr ||
++            !channel->memoryController->transactionQueue.empty())
++            return false;
++        if (channel->ranks == nullptr)
++            return false;
++        for (const Rank* rank : *channel->ranks)
++        {
++            if (rank == nullptr || rank->outgoingDataPacket != nullptr ||
++                !rank->readReturnPacket.empty() || !rank->readReturnCountdown.empty())
++                return false;
++        }
++    }
++    return true;
++}
++
++Phase1RunStats Phase1Driver::runDirect(MultiChannelMemorySystem& memory, uint64_t watchdogCycles)
++{
++    Phase1RunStats stats;
++    while (!directIdle(memory))
++    {
++        if (stats.updates >= watchdogCycles)
++        {
++            stats.timeout = true;
++            break;
++        }
++        memory.update();
++        stats.updates++;
++        stats.cycles = stats.updates;
++    }
++    for (const MemorySystem* channel : memory.channels)
++        if (channel != nullptr)
++            stats.pending_at_end += channel->pendingTransactions.size();
++    return stats;
++}
++
++Phase1RunStats Phase1Driver::runFeeder(Phase1FeederMemory& memory, uint64_t watchdogCycles)
++{
++    Phase1RunStats stats;
++    stats.feeder_used = true;
++    while (!memory.isIdle())
++    {
++        if (stats.updates >= watchdogCycles)
++        {
++            stats.timeout = true;
++            break;
++        }
++        memory.tick();
++        memory.update();
++        stats.updates++;
++        stats.cycles = stats.updates;
++    }
++    stats.pending_at_end = memory.pendingCount();
++    stats.outstanding_at_end = memory.outstandingCount();
++    stats.max_external_pending = memory.maxPending();
++    stats.max_accepted_outstanding = memory.maxOutstanding();
++    stats.controller_rejections = memory.controllerRejections();
++    stats.barriers_retired = memory.barriersRetired();
++    return stats;
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Driver.h b/src/Phase1Driver.h
+new file mode 100644
+index 0000000..4be1987
+--- /dev/null
++++ b/src/Phase1Driver.h
+@@ -0,0 +1,59 @@
++#ifndef PHASE1_DRIVER_H
++#define PHASE1_DRIVER_H
++
++#include <cstddef>
++#include <cstdint>
++#include <map>
++#include <string>
++
++#include "MultiChannelMemorySystem.h"
++#include "Phase1Feeder.h"
++
++namespace DRAMSim
++{
++struct Phase1RunConfig
++{
++    std::string experiment;
++    std::string workload;
++    std::string mode;
++    std::string trace_mode;
++    std::string device_ini;
++    std::string system_ini;
++    unsigned channels = 0;
++    unsigned ranks = 0;
++    unsigned capacity_mb = 0;
++    unsigned n_tiles = 0;
++    unsigned seed = 0;
++    unsigned feeder_outstanding_limit = 8;
++    unsigned feeder_issue_per_cycle = 1;
++    uint64_t watchdog_cycles = 100000;
++};
++
++struct Phase1RunStats
++{
++    uint64_t cycles = 0;
++    uint64_t updates = 0;
++    bool timeout = false;
++    bool feeder_used = false;
++    std::size_t pending_at_end = 0;
++    std::size_t outstanding_at_end = 0;
++    std::size_t max_external_pending = 0;
++    std::size_t max_accepted_outstanding = 0;
++    uint64_t controller_rejections = 0;
++    uint64_t barriers_retired = 0;
++};
++
++// Parse the flat Phase1 params.ini.  Unknown keys are rejected so a typo
++// cannot silently select a different experiment.
++Phase1RunConfig loadPhase1Config(const std::string& path);
++
++class Phase1Driver
++{
++  public:
++    static Phase1RunStats runDirect(MultiChannelMemorySystem& memory, uint64_t watchdogCycles);
++    static Phase1RunStats runFeeder(Phase1FeederMemory& memory, uint64_t watchdogCycles);
++    static bool directIdle(const MultiChannelMemorySystem& memory);
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Ecc.cpp b/src/Phase1Ecc.cpp
+new file mode 100644
+index 0000000..2fa8f95
+--- /dev/null
++++ b/src/Phase1Ecc.cpp
+@@ -0,0 +1,137 @@
++#include "Phase1Ecc.h"
++
++namespace DRAMSim
++{
++namespace
++{
++constexpr unsigned kDataBits = 64;
++constexpr unsigned kCodewordBits = 72;
++
++int bitAt(const std::array<unsigned, kCodewordBits>& bits, unsigned position)
++{
++    return (position >= 1 && position <= kCodewordBits) ? static_cast<int>(bits[position - 1]) : 0;
++}
++
++void putDataBits(std::array<unsigned, kCodewordBits>& bits, uint64_t data)
++{
++    const auto& positions = Phase1Ecc::dataBitPositions();
++    for (unsigned i = 0; i < kDataBits; i++)
++        bits[positions[i] - 1] = static_cast<unsigned>((data >> i) & 1u);
++}
++
++void putParityBits(std::array<unsigned, kCodewordBits>& bits, uint8_t parity)
++{
++    const auto& positions = Phase1Ecc::hammingParityPositions();
++    for (unsigned i = 0; i < positions.size(); i++)
++        bits[positions[i] - 1] = (parity >> i) & 1u;
++    bits[71] = (parity >> 7) & 1u;
++}
++
++uint64_t extractData(const std::array<unsigned, kCodewordBits>& bits)
++{
++    const auto& positions = Phase1Ecc::dataBitPositions();
++    uint64_t data = 0;
++    for (unsigned i = 0; i < kDataBits; i++)
++        data |= static_cast<uint64_t>(bits[positions[i] - 1]) << i;
++    return data;
++}
++}  // namespace
++
++const std::array<unsigned, 7>& Phase1Ecc::hammingParityPositions()
++{
++    static const std::array<unsigned, 7> positions = {1, 2, 4, 8, 16, 32, 64};
++    return positions;
++}
++
++const std::array<unsigned, 64>& Phase1Ecc::dataBitPositions()
++{
++    static const std::array<unsigned, 64> positions = [] {
++        std::array<unsigned, 64> result{};
++        unsigned next = 0;
++        for (unsigned position = 1; position <= 71; position++)
++        {
++            if (position == 1 || position == 2 || position == 4 || position == 8 || position == 16 ||
++                position == 32 || position == 64)
++                continue;
++            result[next++] = position;
++        }
++        return result;
++    }();
++    return positions;
++}
++
++uint8_t Phase1Ecc::encodeParity(uint64_t data)
++{
++    std::array<unsigned, kCodewordBits> bits{};
++    putDataBits(bits, data);
++    const auto& parityPositions = hammingParityPositions();
++    uint8_t parity = 0;
++    for (unsigned i = 0; i < parityPositions.size(); i++)
++    {
++        const unsigned p = parityPositions[i];
++        unsigned value = 0;
++        for (unsigned position = 1; position <= 71; position++)
++        {
++            if ((position & p) != 0)
++                value ^= bits[position - 1];
++        }
++        bits[p - 1] = value;
++        parity |= static_cast<uint8_t>(value << i);
++    }
++    unsigned overall = 0;
++    for (unsigned position = 1; position <= 71; position++)
++        overall ^= bits[position - 1];
++    bits[71] = overall;
++    parity |= static_cast<uint8_t>(overall << 7);
++    return parity;
++}
++
++Phase1EccResult Phase1Ecc::decode(uint64_t data, uint8_t parity)
++{
++    std::array<unsigned, kCodewordBits> bits{};
++    putDataBits(bits, data);
++    putParityBits(bits, parity);
++
++    unsigned syndrome = 0;
++    for (unsigned position = 1; position <= 71; position++)
++        if (bitAt(bits, position) != 0)
++            syndrome ^= position;
++    unsigned overall = 0;
++    for (unsigned position = 1; position <= 72; position++)
++        overall ^= static_cast<unsigned>(bitAt(bits, position));
++
++    Phase1EccResult result;
++    result.data = data;
++    result.syndrome = syndrome;
++    result.overall_parity = overall;
++
++    if (syndrome == 0 && overall == 0)
++    {
++        result.status = Phase1EccStatus::CLEAN;
++        return result;
++    }
++    if (syndrome == 0 && overall == 1)
++    {
++        // Only the position-72 overall parity bit is wrong.
++        result.status = Phase1EccStatus::CORRECTED;
++        return result;
++    }
++    if (syndrome != 0 && overall == 1 && syndrome <= 71)
++    {
++        // Correct the single position indicated by the syndrome.  If the
++        // position is a Hamming parity bit, the data bits are unchanged.
++        bits[syndrome - 1] ^= 1u;
++        result.data = extractData(bits);
++        result.status = Phase1EccStatus::CORRECTED;
++        return result;
++    }
++    if (syndrome > 71 && overall == 1)
++    {
++        result.status = Phase1EccStatus::INVALID;
++        return result;
++    }
++    result.status = Phase1EccStatus::UNCORRECTABLE;
++    return result;
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Ecc.h b/src/Phase1Ecc.h
+new file mode 100644
+index 0000000..4d997ad
+--- /dev/null
++++ b/src/Phase1Ecc.h
+@@ -0,0 +1,48 @@
++#ifndef PHASE1_ECC_H
++#define PHASE1_ECC_H
++
++#include <array>
++#include <cstdint>
++
++namespace DRAMSim
++{
++enum class Phase1EccStatus
++{
++    CLEAN,
++    CORRECTED,
++    UNCORRECTABLE,
++    INVALID,
++    UNPROTECTED_FORMAT
++};
++
++struct Phase1EccResult
++{
++    uint64_t data = 0;
++    Phase1EccStatus status = Phase1EccStatus::CLEAN;
++    unsigned syndrome = 0;
++    unsigned overall_parity = 0;
++};
++
++// Explicit extended Hamming SECDED(72,64) research model.
++//
++// Codeword positions are 1..72:
++//   1,2,4,8,16,32,64 -> Hamming parity
++//   other 1..71      -> data bits 0..63 in ascending position order
++//   72               -> overall even parity over positions 1..71
++//
++// The 8-bit parity byte uses bit 0..6 for the Hamming parity positions
++// 1,2,4,8,16,32,64 and bit 7 for the position-72 overall parity bit.  This
++// layout is a Phase1 model choice, not a claim about a commercial HBM ECC
++// codeword layout.
++class Phase1Ecc
++{
++  public:
++    static uint8_t encodeParity(uint64_t data);
++    static Phase1EccResult decode(uint64_t data, uint8_t parity);
++
++    static const std::array<unsigned, 7>& hammingParityPositions();
++    static const std::array<unsigned, 64>& dataBitPositions();
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Feeder.cpp b/src/Phase1Feeder.cpp
+new file mode 100644
+index 0000000..4d98187
+--- /dev/null
++++ b/src/Phase1Feeder.cpp
+@@ -0,0 +1,389 @@
++#include "Phase1Feeder.h"
++
++#include <algorithm>
++#include <stdexcept>
++
++#include "Phase1Trace.h"
++
++namespace DRAMSim
++{
++namespace
++{
++bool isPimBroadcastTag(const std::string& tag)
++{
++    return tag == "BANK_TO_GRF_" || tag == "ADD" || tag == "GRF_TO_BANK" ||
++           tag == "FILL&ReLU" || tag == "GRF_A_TO_EVEN_BANK" || tag == "GRF_B_TO_ODD_BANK" ||
++           tag == "MAC_" || tag == "GRF_B_TO_BANK_" || tag == "RESET_GRF_B";
++}
++}  // namespace
++
++Phase1FeederMemory::Phase1FeederMemory(const std::string& deviceIniFilename,
++                                       const std::string& systemIniFilename,
++                                       const std::string& pwd, const std::string& traceFilename,
++                                       unsigned megsOfMemory, unsigned outstandingLimit)
++    : MultiChannelMemorySystem(deviceIniFilename, systemIniFilename, pwd, traceFilename,
++                               megsOfMemory),
++      outstanding_limit_(outstandingLimit)
++{
++    if (outstanding_limit_ == 0)
++        throw std::invalid_argument("feeder outstanding limit must be non-zero");
++    outstanding_.assign(channels.size(), 0);
++    frozen_.assign(channels.size(), false);
++    read_callback_.reset(
++        new Callback<Phase1FeederMemory, void, unsigned, uint64_t, uint64_t>(
++            this, &Phase1FeederMemory::onReadComplete));
++    write_callback_.reset(
++        new Callback<Phase1FeederMemory, void, unsigned, uint64_t, uint64_t>(
++            this, &Phase1FeederMemory::onWriteComplete));
++    RegisterCallbacks(read_callback_.get(), write_callback_.get(), nullptr);
++}
++
++bool Phase1FeederMemory::addTransaction(Transaction* trans)
++{
++    if (trans == nullptr)
++        return false;
++    const bool isWrite = (trans->transactionType == DATA_WRITE);
++    if (trans->transactionType != DATA_WRITE && trans->transactionType != DATA_READ)
++    {
++        delete trans;
++        return false;
++    }
++    const bool queued = enqueue(isWrite, trans->address, trans->tag, trans->data);
++    delete trans;
++    return queued;
++}
++
++bool Phase1FeederMemory::addTransaction(bool isWrite, uint64_t addr, BurstType* data)
++{
++    return enqueue(isWrite, addr, "", data);
++}
++
++bool Phase1FeederMemory::addTransaction(bool isWrite, uint64_t addr, const std::string& tag,
++                                        BurstType* data)
++{
++    return enqueue(isWrite, addr, tag, data);
++}
++
++bool Phase1FeederMemory::addBarrier(int chanId)
++{
++    if (chanId < 0 || static_cast<size_t>(chanId) >= channels.size())
++        throw std::out_of_range("feeder barrier channel out of range");
++    auto item = std::unique_ptr<Item>(new Item());
++    item->kind = Item::Kind::BARRIER;
++    item->channel = static_cast<unsigned>(chanId);
++    item->sequence = next_sequence_++;
++    const uint64_t sequence = item->sequence;
++    pending_.push_back(std::move(item));
++    max_pending_ = std::max(max_pending_, pending_.size());
++    if (trace_ != nullptr)
++        trace_->event(currentClockCycle, "ENQUEUE", "BARRIER_ENQUEUE", "1", "1",
++                      std::to_string(sequence), -1, -1, -1, -1, -1, "", -1, "queued");
++    return true;
++}
++
++void Phase1FeederMemory::decodeAddress(uint64_t address, unsigned& channel, unsigned& rank,
++                                       unsigned& bank, unsigned& row, unsigned& column) const
++{
++    addrMapping->addressMapping(address, channel, rank, bank, row, column);
++    if (channel >= channels.size())
++        throw std::out_of_range("feeder address maps outside channel range");
++}
++
++bool Phase1FeederMemory::enqueue(bool isWrite, uint64_t address, const std::string& tag,
++                                 BurstType* data)
++{
++    if (data == nullptr)
++        throw std::invalid_argument("feeder transaction has null payload/buffer");
++    auto item = std::unique_ptr<Item>(new Item());
++    item->kind = Item::Kind::TRANSACTION;
++    item->is_write = isWrite;
++    item->address = address;
++    decodeAddress(address, item->channel, item->rank, item->bank, item->row, item->column);
++    item->tag = tag;
++    item->access_path = tag;
++    if (tag == "PROGRAM_CRF" || tag == "PIM")
++    {
++        item->location = Item::LocationKind::PIM_CONTROL;
++        item->access_path = tag + ":PIM_CONTROL";
++    }
++    else if (isPimBroadcastTag(tag))
++    {
++        item->location = Item::LocationKind::PIM_BROADCAST;
++        item->access_path = tag + ":PIM_BROADCAST";
++    }
++    if (isWrite)
++        item->payload = *data;  // stable ownership of the write payload
++    else
++        item->read_buffer = data;  // caller-owned receive buffer, kept alive by caller
++    item->sequence = next_sequence_++;
++    traceItem(*item, "ENQUEUE", "DESCRIPTOR_ENQUEUE", "queued");
++    pending_.push_back(std::move(item));
++    max_pending_ = std::max(max_pending_, pending_.size());
++    return true;
++}
++
++void Phase1FeederMemory::traceItem(const Item& item, const std::string& phase,
++                                   const std::string& eventType, const std::string& status,
++                                   int cycleOffset) const
++{
++    if (trace_ == nullptr)
++        return;
++    const int64_t cycle = static_cast<int64_t>(currentClockCycle) + cycleOffset;
++    const bool hasBank = item.location == Item::LocationKind::NORMAL;
++    const bool hasRowCol = item.location != Item::LocationKind::PIM_CONTROL;
++    trace_->event(cycle < 0 ? 0 : static_cast<uint64_t>(cycle), phase, eventType, "1", "1",
++                  std::to_string(item.sequence), static_cast<int>(item.channel),
++                  static_cast<int>(item.rank), hasBank ? static_cast<int>(item.bank) : -1,
++                  hasRowCol ? static_cast<int>(item.row) : -1,
++                  hasRowCol ? static_cast<int>(item.column) : -1, item.access_path, 32, status);
++}
++
++void Phase1FeederMemory::traceNoItem(const std::string& phase, const std::string& eventType,
++                                     const std::string& status, int cycleOffset) const
++{
++    if (trace_ == nullptr)
++        return;
++    const int64_t cycle = static_cast<int64_t>(currentClockCycle) + cycleOffset;
++    trace_->event(cycle < 0 ? 0 : static_cast<uint64_t>(cycle), phase, eventType, "1", "1", "", -1,
++                  -1, -1, -1, -1, "", -1, status);
++}
++
++bool Phase1FeederMemory::barrierReady(unsigned channel) const
++{
++    if (channel >= outstanding_.size() || outstanding_[channel] != 0)
++        return false;
++    if (MultiChannelMemorySystem::hasPendingTransactions() != 0)
++        return false;
++    return rankAndControllerIdle();
++}
++
++bool Phase1FeederMemory::rankAndControllerIdle() const
++{
++    for (size_t c = 0; c < channels.size(); c++)
++    {
++        const MemorySystem* memory = channels[c];
++        if (memory == nullptr)
++            return false;
++        if (!memory->pendingTransactions.empty())
++            return false;
++        if (memory->memoryController == nullptr ||
++            !memory->memoryController->transactionQueue.empty())
++            return false;
++        if (memory->ranks == nullptr)
++            return false;
++        for (Rank* rank : *memory->ranks)
++        {
++            if (rank == nullptr || rank->outgoingDataPacket != nullptr ||
++                !rank->readReturnPacket.empty() || !rank->readReturnCountdown.empty())
++                return false;
++        }
++    }
++    return true;
++}
++
++bool Phase1FeederMemory::tick()
++{
++    if (pending_.empty())
++        return false;
++
++    Item& front = *pending_.front();
++    if (front.channel < frozen_.size() && frozen_[front.channel])
++        return false;
++    if (front.kind == Item::Kind::BARRIER)
++    {
++        if (!barrierReady(front.channel))
++            return false;
++        // With no accepted transaction left, the upstream barrier has nothing
++        // to attach to; the conservative feeder order already guarantees the
++        // prior stage is quiesced.
++        MultiChannelMemorySystem::addBarrier(static_cast<int>(front.channel));
++        traceNoItem("FEEDER", "BARRIER_RETIRED", "retired");
++        pending_.pop_front();
++        barriers_retired_++;
++        return true;
++    }
++
++    const unsigned channel = front.channel;
++    if (channel >= outstanding_.size())
++        throw std::out_of_range("feeder channel out of range");
++    if (outstanding_[channel] >= outstanding_limit_)
++        return false;
++    if (!MultiChannelMemorySystem::willAcceptTransaction(front.address))
++    {
++        controller_rejections_++;
++        traceItem(front, "FEEDER", "CONTROLLER_REJECT", "rejected");
++        return false;
++    }
++
++    BurstType* data = front.is_write ? &front.payload : front.read_buffer;
++    if (data == nullptr)
++        throw std::logic_error("feeder transaction has no data pointer");
++    if (!MultiChannelMemorySystem::addTransaction(front.is_write, front.address, front.tag, data))
++    {
++        controller_rejections_++;
++        traceItem(front, "FEEDER", "CONTROLLER_REJECT", "rejected");
++        return false;
++    }
++
++    outstanding_[channel]++;
++    max_outstanding_ = std::max(max_outstanding_, outstandingCount());
++    traceItem(front, "FEEDER", "CONTROLLER_ACCEPT", "accepted");
++    if (trace_ != nullptr && trace_->enabled())
++    {
++        CompletionRecord record;
++        record.sequence = front.sequence;
++        record.location = front.location;
++        record.access_path = front.access_path;
++        completion_ids_.insert(std::make_pair(front.address, record));
++    }
++    accepted_.push_back(std::move(pending_.front()));
++    pending_.pop_front();
++    return true;
++}
++
++bool Phase1FeederMemory::tickChannel(unsigned channel)
++{
++    if (channel >= outstanding_.size() || frozen_[channel])
++        return false;
++    for (auto it = pending_.begin(); it != pending_.end(); ++it)
++    {
++        Item& item = **it;
++        if (item.channel != channel)
++            continue;
++        if (item.kind == Item::Kind::BARRIER)
++            return false;  // barrier handling is only through tick()
++        if (outstanding_[channel] >= outstanding_limit_)
++            return false;
++        if (!MultiChannelMemorySystem::willAcceptTransaction(item.address))
++        {
++            controller_rejections_++;
++            traceItem(item, "FEEDER", "CONTROLLER_REJECT", "rejected");
++            return false;
++        }
++        BurstType* data = item.is_write ? &item.payload : item.read_buffer;
++        if (data == nullptr)
++            throw std::logic_error("feeder transaction has no data pointer");
++        if (!MultiChannelMemorySystem::addTransaction(item.is_write, item.address, item.tag, data))
++        {
++            controller_rejections_++;
++            traceItem(item, "FEEDER", "CONTROLLER_REJECT", "rejected");
++            return false;
++        }
++        outstanding_[channel]++;
++        max_outstanding_ = std::max(max_outstanding_, outstandingCount());
++        traceItem(item, "FEEDER", "CONTROLLER_ACCEPT", "accepted");
++        if (trace_ != nullptr && trace_->enabled())
++        {
++            CompletionRecord record;
++            record.sequence = item.sequence;
++            record.location = item.location;
++            record.access_path = item.access_path;
++            completion_ids_.insert(std::make_pair(item.address, record));
++        }
++        accepted_.push_back(std::move(*it));
++        pending_.erase(it);
++        return true;
++    }
++    return false;
++}
++
++void Phase1FeederMemory::freezeChannel(unsigned channel)
++{
++    if (channel >= frozen_.size())
++        throw std::out_of_range("feeder freeze channel out of range");
++    frozen_[channel] = true;
++}
++
++void Phase1FeederMemory::unfreezeChannel(unsigned channel)
++{
++    if (channel >= frozen_.size())
++        throw std::out_of_range("feeder unfreeze channel out of range");
++    frozen_[channel] = false;
++}
++
++bool Phase1FeederMemory::isFrozen(unsigned channel) const
++{
++    return channel < frozen_.size() && frozen_[channel];
++}
++
++bool Phase1FeederMemory::channelIdle(unsigned channel) const
++{
++    if (channel >= outstanding_.size() || outstanding_[channel] != 0)
++        return false;
++    const MemorySystem* memory = channels[channel];
++    if (memory == nullptr || !memory->pendingTransactions.empty())
++        return false;
++    if (memory->memoryController == nullptr ||
++        !memory->memoryController->transactionQueue.empty())
++        return false;
++    if (memory->ranks == nullptr)
++        return false;
++    for (const Rank* rank : *memory->ranks)
++        if (rank == nullptr || rank->outgoingDataPacket != nullptr ||
++            !rank->readReturnPacket.empty() || !rank->readReturnCountdown.empty())
++            return false;
++    return true;
++}
++
++bool Phase1FeederMemory::isIdle() const
++{
++    if (!pending_.empty() || outstandingCount() != 0)
++        return false;
++    if (MultiChannelMemorySystem::hasPendingTransactions() != 0)
++        return false;
++    return rankAndControllerIdle();
++}
++
++std::size_t Phase1FeederMemory::outstandingCount() const
++{
++    std::size_t total = 0;
++    for (unsigned value : outstanding_)
++        total += value;
++    return total;
++}
++
++void Phase1FeederMemory::onReadComplete(unsigned systemID, uint64_t address, uint64_t cycle)
++{
++    (void)cycle;
++    if (systemID < outstanding_.size() && outstanding_[systemID] > 0)
++        outstanding_[systemID]--;
++    if (trace_ != nullptr && trace_->enabled())
++    {
++        auto found = completion_ids_.find(address);
++        if (found != completion_ids_.end())
++        {
++            Item item;
++            item.address = address;
++            item.sequence = found->second.sequence;
++            item.location = found->second.location;
++            item.access_path = found->second.access_path;
++            decodeAddress(address, item.channel, item.rank, item.bank, item.row, item.column);
++            traceItem(item, "COMPLETE", "READ_COMPLETE", "completed");
++            completion_ids_.erase(found);
++        }
++    }
++}
++
++void Phase1FeederMemory::onWriteComplete(unsigned systemID, uint64_t address, uint64_t cycle)
++{
++    (void)cycle;
++    if (systemID < outstanding_.size() && outstanding_[systemID] > 0)
++        outstanding_[systemID]--;
++    if (trace_ != nullptr && trace_->enabled())
++    {
++        auto found = completion_ids_.find(address);
++        if (found != completion_ids_.end())
++        {
++            Item item;
++            item.address = address;
++            item.sequence = found->second.sequence;
++            item.location = found->second.location;
++            item.access_path = found->second.access_path;
++            decodeAddress(address, item.channel, item.rank, item.bank, item.row, item.column);
++            traceItem(item, "COMPLETE", "WRITE_DATA_DONE", "data_bus_done");
++            completion_ids_.erase(found);
++        }
++    }
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Feeder.h b/src/Phase1Feeder.h
+new file mode 100644
+index 0000000..fde0b40
+--- /dev/null
++++ b/src/Phase1Feeder.h
+@@ -0,0 +1,131 @@
++#ifndef PHASE1_FEEDER_H
++#define PHASE1_FEEDER_H
++
++#include <cstddef>
++#include <cstdint>
++#include <list>
++#include <map>
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "Callback.h"
++#include "MultiChannelMemorySystem.h"
++
++namespace DRAMSim
++{
++class Phase1Trace;
++
++// Experimental bounded transaction feeder.
++//
++// This is a Phase1 interface model: it does not claim that a real HBM-PIM
++// controller exposes a corresponding external submission queue.  The class
++// keeps the external pending queue separate from the accepted/in-flight
++// transactions counted by the upstream simulator.
++class Phase1FeederMemory : public MultiChannelMemorySystem
++{
++  public:
++    Phase1FeederMemory(const std::string& deviceIniFilename,
++                       const std::string& systemIniFilename, const std::string& pwd,
++                       const std::string& traceFilename, unsigned megsOfMemory,
++                       unsigned outstandingLimit = 8);
++
++    bool addTransaction(Transaction* trans) override;
++    bool addTransaction(bool isWrite, uint64_t addr, BurstType* data) override;
++    bool addTransaction(bool isWrite, uint64_t addr, const std::string& tag,
++                        BurstType* data) override;
++    bool addBarrier(int chanId) override;
++
++    // Submit at most one external item.  Returns true iff an item was
++    // submitted/consumed or a barrier was retired.
++    bool tick();
++    // Submit at most one external item for a specific channel.  Used by the
++    // two-channel pause smoke; per-channel order is retained.
++    bool tickChannel(unsigned channel);
++
++    void freezeChannel(unsigned channel);
++    void unfreezeChannel(unsigned channel);
++    bool isFrozen(unsigned channel) const;
++    bool channelIdle(unsigned channel) const;
++
++    bool isIdle() const;
++    std::size_t pendingCount() const { return pending_.size(); }
++    std::size_t acceptedCount() const { return accepted_.size(); }
++    std::size_t outstandingCount() const;
++    std::size_t maxPending() const { return max_pending_; }
++    std::size_t maxOutstanding() const { return max_outstanding_; }
++    uint64_t controllerRejections() const { return controller_rejections_; }
++    uint64_t barriersRetired() const { return barriers_retired_; }
++
++    void setTrace(Phase1Trace* trace) { trace_ = trace; }
++
++    // Callbacks are installed on each upstream MemorySystem.  They are used
++    // only for the feeder's own accounting; they do not alter runtime state.
++    void onReadComplete(unsigned systemID, uint64_t address, uint64_t cycle);
++    void onWriteComplete(unsigned systemID, uint64_t address, uint64_t cycle);
++
++  private:
++    struct Item
++    {
++        enum class Kind
++        {
++            TRANSACTION,
++            BARRIER
++        };
++        enum class LocationKind
++        {
++            NORMAL,
++            PIM_BROADCAST,
++            PIM_CONTROL
++        };
++        Kind kind = Kind::TRANSACTION;
++        bool is_write = false;
++        uint64_t address = 0;
++        unsigned channel = 0;
++        unsigned rank = 0;
++        unsigned bank = 0;
++        unsigned row = 0;
++        unsigned column = 0;
++        LocationKind location = LocationKind::NORMAL;
++        std::string tag;
++        std::string access_path;
++        BurstType payload;           // stable copy for writes
++        BurstType* read_buffer = nullptr;  // caller-owned receive buffer
++        uint64_t sequence = 0;
++    };
++
++    struct CompletionRecord
++    {
++        uint64_t sequence = 0;
++        Item::LocationKind location = Item::LocationKind::NORMAL;
++        std::string access_path;
++    };
++
++    bool enqueue(bool isWrite, uint64_t address, const std::string& tag, BurstType* data);
++    void decodeAddress(uint64_t address, unsigned& channel, unsigned& rank, unsigned& bank,
++                       unsigned& row, unsigned& column) const;
++    bool barrierReady(unsigned channel) const;
++    bool rankAndControllerIdle() const;
++    void traceItem(const Item& item, const std::string& phase, const std::string& eventType,
++                   const std::string& status, int cycleOffset = 0) const;
++    void traceNoItem(const std::string& phase, const std::string& eventType,
++                     const std::string& status, int cycleOffset = 0) const;
++
++    std::list<std::unique_ptr<Item>> pending_;
++    std::list<std::unique_ptr<Item>> accepted_;
++    std::vector<unsigned> outstanding_;
++    std::vector<bool> frozen_;
++    unsigned outstanding_limit_ = 8;
++    uint64_t next_sequence_ = 0;
++    uint64_t controller_rejections_ = 0;
++    uint64_t barriers_retired_ = 0;
++    std::size_t max_pending_ = 0;
++    std::size_t max_outstanding_ = 0;
++    Phase1Trace* trace_ = nullptr;
++    std::multimap<uint64_t, CompletionRecord> completion_ids_;
++    std::unique_ptr<TransactionCompleteCB> read_callback_;
++    std::unique_ptr<TransactionCompleteCB> write_callback_;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Pause.cpp b/src/Phase1Pause.cpp
+new file mode 100644
+index 0000000..c843ffd
+--- /dev/null
++++ b/src/Phase1Pause.cpp
+@@ -0,0 +1,47 @@
++#include "Phase1Pause.h"
++
++#include <stdexcept>
++
++namespace DRAMSim
++{
++Phase1PauseController::Phase1PauseController(Phase1FeederMemory& feeder, unsigned channel,
++                                             uint64_t handlerDelay)
++    : feeder_(feeder), channel_(channel), handler_delay_(handlerDelay)
++{
++    if (channel_ >= feeder_.channels.size())
++        throw std::out_of_range("pause channel out of range");
++}
++
++void Phase1PauseController::request(uint64_t cycle, const std::string& reason)
++{
++    if (requested_)
++        return;
++    requested_ = true;
++    request_cycle_ = cycle;
++    reason_ = reason;
++    feeder_.freezeChannel(channel_);
++}
++
++void Phase1PauseController::notifyReport(uint64_t reportCycle)
++{
++    if (requested_ || scheduled_)
++        return;
++    scheduled_ = true;
++    scheduled_cycle_ = reportCycle + handler_delay_;
++    reason_ = "REPORT_TRIGGERED";
++}
++
++void Phase1PauseController::tick(uint64_t cycle)
++{
++    if (scheduled_ && !requested_ && cycle >= scheduled_cycle_)
++    {
++        scheduled_ = false;
++        request(cycle, reason_);
++    }
++    if (requested_ && !acked_ && feeder_.channelIdle(channel_))
++    {
++        acked_ = true;
++        ack_cycle_ = cycle;
++    }
++}
++}  // namespace DRAMSim
+diff --git a/src/Phase1Pause.h b/src/Phase1Pause.h
+new file mode 100644
+index 0000000..2e2a257
+--- /dev/null
++++ b/src/Phase1Pause.h
+@@ -0,0 +1,48 @@
++#ifndef PHASE1_PAUSE_H
++#define PHASE1_PAUSE_H
++
++#include <cstdint>
++#include <string>
++
++#include "Phase1Feeder.h"
++
++namespace DRAMSim
++{
++// G6 channel quiesce controller.  It stops new feeder submissions for the
++// target channel, waits for accepted transactions to drain, and reports ACK.
++// It deliberately does not stop the DRAM clock, refresh, or other channels.
++class Phase1PauseController
++{
++  public:
++    Phase1PauseController(Phase1FeederMemory& feeder, unsigned channel,
++                          uint64_t handlerDelay = 0);
++
++    void request(uint64_t cycle, const std::string& reason = "SYNTHETIC_CONTROL");
++    void notifyReport(uint64_t reportCycle);
++    void tick(uint64_t cycle);
++
++    bool requested() const { return requested_; }
++    bool acked() const { return acked_; }
++    bool scheduled() const { return scheduled_; }
++    unsigned channel() const { return channel_; }
++    const std::string& reason() const { return reason_; }
++    uint64_t requestCycle() const { return request_cycle_; }
++    uint64_t ackCycle() const { return ack_cycle_; }
++    uint64_t quiesceCycles() const { return ack_cycle_ - request_cycle_; }
++    uint64_t scheduledCycle() const { return scheduled_cycle_; }
++
++  private:
++    Phase1FeederMemory& feeder_;
++    unsigned channel_ = 0;
++    uint64_t handler_delay_ = 0;
++    bool requested_ = false;
++    bool acked_ = false;
++    bool scheduled_ = false;
++    std::string reason_;
++    uint64_t scheduled_cycle_ = 0;
++    uint64_t request_cycle_ = 0;
++    uint64_t ack_cycle_ = 0;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Profile.h b/src/Phase1Profile.h
+new file mode 100644
+index 0000000..40433db
+--- /dev/null
++++ b/src/Phase1Profile.h
+@@ -0,0 +1,31 @@
++#ifndef PHASE1_PROFILE_H
++#define PHASE1_PROFILE_H
++
++namespace DRAMSim
++{
++enum class Phase1Profile
++{
++    NATIVE,
++    LOCAL_VISIBLE,
++    LOCAL_HIDDEN,
++    HOST_ONLY
++};
++
++enum class Phase1AccessType
++{
++    HOST,
++    PIM_OPERAND,
++    PIM_RESULT,
++    HAB
++};
++
++enum class Phase1PacketStatus
++{
++    OK = 0,
++    CORRECTED = 1,
++    UNPROTECTED_FORMAT = 2,
++    UNCORRECTABLE = 3
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Reports.cpp b/src/Phase1Reports.cpp
+new file mode 100644
+index 0000000..ac01288
+--- /dev/null
++++ b/src/Phase1Reports.cpp
+@@ -0,0 +1,117 @@
++#include "Phase1Reports.h"
++
++#include <algorithm>
++#include <fstream>
++#include <stdexcept>
++
++namespace DRAMSim
++{
++Phase1Reports::Phase1Reports(const Phase1Address& address, unsigned num_channels,
++                             unsigned num_banks, const std::string& granularity,
++                             uint64_t transport_delay, uint64_t service_interval, unsigned capacity,
++                             bool deliver_ce, bool deliver_ue)
++    : address_(address),
++      num_channels_(num_channels),
++      num_banks_(num_banks),
++      granularity_(granularity),
++      transport_delay_(transport_delay),
++      service_interval_(std::max<uint64_t>(1, service_interval)),
++      capacity_(capacity),
++      deliver_ce_(deliver_ce),
++      deliver_ue_(deliver_ue)
++{
++    if (granularity_ != "bank" && granularity_ != "page")
++        throw std::invalid_argument("report granularity must be bank or page");
++    if (capacity_ == 0)
++        throw std::invalid_argument("report queue capacity must be non-zero");
++}
++
++void Phase1Reports::onDetected(const Phase1Detection& detection)
++{
++    if (detection.status != Phase1EccStatus::CORRECTED &&
++        detection.status != Phase1EccStatus::UNCORRECTABLE)
++        return;
++
++    internal_detections_++;
++    const bool is_ce = (detection.status == Phase1EccStatus::CORRECTED);
++    if (is_ce)
++        internal_ce_++;
++    else
++        internal_ue_++;
++    if ((is_ce && !deliver_ce_) || (!is_ce && !deliver_ue_))
++        return;
++
++    Pending item;
++    item.detect_cycle = detection.detect_cycle;
++    item.ready_cycle = detection.detect_cycle + std::max<uint64_t>(1, transport_delay_);
++    item.arrival_seq = next_arrival_seq_++;
++    item.error_class = is_ce ? "CE" : "UE";
++
++    Phase1AddrTuple tuple;
++    tuple.channel = detection.channel;
++    tuple.rank = detection.rank;
++    tuple.bank = detection.actual_bank;
++    tuple.row = detection.row;
++    tuple.burst_column = detection.burst_column;
++    if (granularity_ == "bank")
++    {
++        item.region_type = "bank";
++        item.region_id = static_cast<uint64_t>(detection.channel) * num_banks_ +
++                         detection.actual_bank;
++    }
++    else
++    {
++        item.region_type = "page";
++        const uint64_t hostAddress = address_.encode(tuple);
++        item.region_id = hostAddress / 4096ULL;
++    }
++
++    if (pending_.size() >= capacity_)
++    {
++        dropped_++;
++        overflow_ = true;
++        return;
++    }
++    pending_.push_back(item);
++    max_queue_depth_ = std::max(max_queue_depth_, pending_.size());
++}
++
++void Phase1Reports::onUnprotectedFormat(const Phase1FormatEvent& event)
++{
++    (void)event;
++    format_events_++;
++}
++
++void Phase1Reports::tick(uint64_t cycle)
++{
++    if (pending_.empty())
++        return;
++    const Pending& front = pending_.front();
++    if (cycle < front.ready_cycle || cycle < next_service_cycle_)
++        return;
++
++    Phase1PublicReport report;
++    report.report_seq = next_report_seq_++;
++    report.report_cycle = cycle;
++    report.error_class = front.error_class;
++    report.region_type = front.region_type;
++    report.region_id = front.region_id;
++    reports_.push_back(report);
++    latencies_.push_back(cycle - front.detect_cycle);
++    delivered_++;
++    next_service_cycle_ = cycle + service_interval_;
++    pending_.pop_front();
++}
++
++void Phase1Reports::writeCsv(const std::string& path) const
++{
++    std::ofstream output(path, std::ios::out | std::ios::trunc);
++    if (!output)
++        throw std::runtime_error("cannot open reports.csv: " + path);
++    output << "report_seq,report_cycle,error_class,region_type,region_id\n";
++    for (const Phase1PublicReport& report : reports_)
++        output << report.report_seq << ',' << report.report_cycle << ',' << report.error_class << ','
++               << report.region_type << ',' << report.region_id << '\n';
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Reports.h b/src/Phase1Reports.h
+new file mode 100644
+index 0000000..a6bee4b
+--- /dev/null
++++ b/src/Phase1Reports.h
+@@ -0,0 +1,126 @@
++#ifndef PHASE1_REPORTS_H
++#define PHASE1_REPORTS_H
++
++#include <cstdint>
++#include <deque>
++#include <string>
++#include <vector>
++
++#include "Phase1Address.h"
++#include "Phase1Ecc.h"
++#include "Phase1Profile.h"
++
++namespace DRAMSim
++{
++struct Phase1Detection
++{
++    uint64_t detect_cycle = 0;
++    unsigned channel = 0;
++    unsigned rank = 0;
++    unsigned actual_bank = 0;
++    unsigned row = 0;
++    unsigned burst_column = 0;
++    unsigned codeword_index = 0;
++    Phase1EccStatus status = Phase1EccStatus::CLEAN;
++    Phase1AccessType access = Phase1AccessType::HOST;
++};
++
++struct Phase1FormatEvent
++{
++    uint64_t detect_cycle = 0;
++    unsigned channel = 0;
++    unsigned rank = 0;
++    unsigned actual_bank = 0;
++    unsigned row = 0;
++    unsigned burst_column = 0;
++    unsigned codeword_index = 0;
++    Phase1AccessType access = Phase1AccessType::HOST;
++};
++
++struct Phase1PublicReport
++{
++    uint64_t report_seq = 0;
++    uint64_t report_cycle = 0;
++    std::string error_class;
++    std::string region_type;
++    uint64_t region_id = 0;
++};
++
++class Phase1ReportSink
++{
++  public:
++    virtual ~Phase1ReportSink() {}
++    virtual void onDetected(const Phase1Detection& detection) = 0;
++    virtual void onUnprotectedFormat(const Phase1FormatEvent& event) = 0;
++};
++
++// Coarse report queue.  It has no reference to runtime, golden output or fault
++// schedules.  The CSV contains only the public fields; detect_cycle remains
++// internal and is used only for latency accounting in the test harness.
++class Phase1Reports : public Phase1ReportSink
++{
++  public:
++    Phase1Reports(const Phase1Address& address, unsigned num_channels, unsigned num_banks,
++                  const std::string& granularity, uint64_t transport_delay,
++                  uint64_t service_interval, unsigned capacity, bool deliver_ce,
++                  bool deliver_ue);
++
++    void onDetected(const Phase1Detection& detection) override;
++    void onUnprotectedFormat(const Phase1FormatEvent& event) override;
++
++    // Deliver at most one due report at this cycle.  Call once per DRAM cycle.
++    void tick(uint64_t cycle);
++    void writeCsv(const std::string& path) const;
++
++    const std::vector<Phase1PublicReport>& reports() const { return reports_; }
++    const std::vector<uint64_t>& reportLatencies() const { return latencies_; }
++    std::size_t pendingCount() const { return pending_.size(); }
++    uint64_t internalDetections() const { return internal_detections_; }
++    uint64_t internalCe() const { return internal_ce_; }
++    uint64_t internalUe() const { return internal_ue_; }
++    uint64_t delivered() const { return delivered_; }
++    uint64_t dropped() const { return dropped_; }
++    uint64_t formatEvents() const { return format_events_; }
++    bool overflow() const { return overflow_; }
++    std::size_t maxQueueDepth() const { return max_queue_depth_; }
++    std::size_t droppedReports() const { return dropped_; }
++
++  private:
++    struct Pending
++    {
++        uint64_t detect_cycle = 0;
++        uint64_t ready_cycle = 0;
++        uint64_t arrival_seq = 0;
++        std::string error_class;
++        std::string region_type;
++        uint64_t region_id = 0;
++    };
++
++    Phase1Address address_;
++    unsigned num_channels_ = 0;
++    unsigned num_banks_ = 0;
++    std::string granularity_;
++    uint64_t transport_delay_ = 0;
++    uint64_t service_interval_ = 1;
++    unsigned capacity_ = 64;
++    bool deliver_ce_ = true;
++    bool deliver_ue_ = true;
++
++    std::deque<Pending> pending_;
++    std::vector<Phase1PublicReport> reports_;
++    std::vector<uint64_t> latencies_;
++    uint64_t next_service_cycle_ = 0;
++    uint64_t next_report_seq_ = 1;
++    uint64_t next_arrival_seq_ = 1;
++    uint64_t internal_detections_ = 0;
++    uint64_t internal_ce_ = 0;
++    uint64_t internal_ue_ = 0;
++    uint64_t delivered_ = 0;
++    uint64_t dropped_ = 0;
++    uint64_t format_events_ = 0;
++    bool overflow_ = false;
++    std::size_t max_queue_depth_ = 0;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Runtime.cpp b/src/Phase1Runtime.cpp
+new file mode 100644
+index 0000000..caf6a17
+--- /dev/null
++++ b/src/Phase1Runtime.cpp
+@@ -0,0 +1,178 @@
++#include "Phase1Runtime.h"
++
++#include <stdexcept>
++
++namespace DRAMSim
++{
++const char* outputStateName(OutputState state)
++{
++    switch (state)
++    {
++        case OutputState::ALLOCATED: return "ALLOCATED";
++        case OutputState::PRODUCING: return "PRODUCING";
++        case OutputState::READY_UNPUBLISHED: return "READY_UNPUBLISHED";
++        case OutputState::PUBLISHED: return "PUBLISHED";
++        case OutputState::SUSPECT: return "SUSPECT";
++        case OutputState::QUIESCED: return "QUIESCED";
++        case OutputState::RESTORING: return "RESTORING";
++        case OutputState::REEXECUTING: return "REEXECUTING";
++        case OutputState::POISONED: return "POISONED";
++        case OutputState::ABORTED: return "ABORTED";
++    }
++    return "UNKNOWN";
++}
++
++Phase1Runtime::Phase1Runtime(uint64_t holdCycles) : hold_cycles_(holdCycles) {}
++
++Phase1Runtime::Version& Phase1Runtime::currentVersionRecord()
++{
++    return current_;
++}
++
++const Phase1Runtime::Version& Phase1Runtime::currentVersionRecord() const
++{
++    return current_;
++}
++
++bool Phase1Runtime::handleCurrent(OutputHandle handle) const
++{
++    return handle.valid && currentVersion_ != 0 && handle.version == currentVersion_;
++}
++
++OutputHandle Phase1Runtime::allocateOutput(uint64_t bytes, uint64_t cycle)
++{
++    current_ = Version();
++    current_.version = ++currentVersion_;
++    current_.bytes = bytes;
++    current_.state = OutputState::ALLOCATED;
++    current_.allocated_cycle = cycle;
++    publish_cycle_ = 0;
++    lock_cycle_ = 0;
++    producer_done_cycle_ = 0;
++    publish_ready_cycle_ = 0;
++    OutputHandle handle;
++    handle.version = currentVersion_;
++    handle.valid = true;
++    return handle;
++}
++
++void Phase1Runtime::beginProducing(OutputHandle handle, uint64_t cycle)
++{
++    if (!handleCurrent(handle))
++        throw std::logic_error("STALE_HANDLE");
++    (void)cycle;
++    if (current_.state != OutputState::ALLOCATED)
++        throw std::logic_error("output version is not ALLOCATED");
++    current_.state = OutputState::PRODUCING;
++}
++
++void Phase1Runtime::producerComplete(OutputHandle handle, uint64_t cycle)
++{
++    if (!handleCurrent(handle))
++        throw std::logic_error("STALE_HANDLE");
++    if (current_.state != OutputState::PRODUCING &&
++        current_.state != OutputState::READY_UNPUBLISHED &&
++        current_.state != OutputState::SUSPECT &&
++        current_.state != OutputState::POISONED)
++        throw std::logic_error("producer completion in invalid output state");
++    current_.producer_done_cycle = cycle;
++    current_.publish_ready_cycle = cycle + hold_cycles_;
++    producer_done_cycle_ = cycle;
++    publish_ready_cycle_ = current_.publish_ready_cycle;
++    if (current_.state == OutputState::PRODUCING)
++        current_.state = OutputState::READY_UNPUBLISHED;
++}
++
++void Phase1Runtime::onReport(const Phase1PublicReport& report, uint64_t cycle)
++{
++    if (currentVersion_ == 0 || current_.state == OutputState::ABORTED)
++        return;
++    if (report.error_class != "CE" && report.error_class != "UE")
++        return;
++    if (current_.state == OutputState::PUBLISHED)
++    {
++        late_reports_++;
++        return;
++    }
++    if (current_.state == OutputState::POISONED)
++        return;
++    if (current_.state == OutputState::SUSPECT && report.error_class != "UE")
++        return;
++    if (report.error_class == "UE")
++    {
++        current_.state = OutputState::POISONED;
++    }
++    else
++    {
++        current_.state = OutputState::SUSPECT;
++    }
++    lock_cycle_ = cycle;
++    current_.lock_cycle = cycle;
++    lock_count_++;
++}
++
++void Phase1Runtime::tick(uint64_t cycle)
++{
++    if (currentVersion_ == 0)
++        return;
++    if (current_.state != OutputState::READY_UNPUBLISHED)
++        return;
++    if (cycle < current_.publish_ready_cycle)
++        return;
++    current_.state = OutputState::PUBLISHED;
++    current_.publish_cycle = cycle;
++    publish_cycle_ = cycle;
++}
++
++bool Phase1Runtime::canConsume(OutputHandle handle, ConsumerType consumer, uint64_t cycle) const
++{
++    (void)consumer;
++    (void)cycle;
++    return handleCurrent(handle) && current_.state == OutputState::PUBLISHED;
++}
++
++bool Phase1Runtime::canAdmit(OutputHandle handle, ConsumerType consumer, uint64_t cycle) const
++{
++    return canConsume(handle, consumer, cycle);
++}
++
++bool Phase1Runtime::consume(OutputHandle handle, ConsumerType consumer, uint64_t cycle)
++{
++    if (!canConsume(handle, consumer, cycle))
++    {
++        blocked_consumer_reads_++;
++        return false;
++    }
++    current_.consumed++;
++    consumed_reads_++;
++    return true;
++}
++
++void Phase1Runtime::assertConsumerAllowed(OutputHandle handle, ConsumerType consumer,
++                                          uint64_t cycle) const
++{
++    if (!handleCurrent(handle))
++        throw std::logic_error("STALE_HANDLE");
++    if (!canConsume(handle, consumer, cycle))
++        throw std::logic_error(std::string("UNPUBLISHED_OUTPUT:") +
++                               outputStateName(current_.state));
++}
++
++OutputState Phase1Runtime::state(OutputHandle handle) const
++{
++    if (!handleCurrent(handle))
++        return OutputState::ABORTED;
++    return current_.state;
++}
++
++bool Phase1Runtime::isStale(OutputHandle handle) const
++{
++    return !handleCurrent(handle);
++}
++
++bool Phase1Runtime::isPublished(OutputHandle handle) const
++{
++    return handleCurrent(handle) && current_.state == OutputState::PUBLISHED;
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Runtime.h b/src/Phase1Runtime.h
+new file mode 100644
+index 0000000..df0ec0b
+--- /dev/null
++++ b/src/Phase1Runtime.h
+@@ -0,0 +1,107 @@
++#ifndef PHASE1_RUNTIME_H
++#define PHASE1_RUNTIME_H
++
++#include <cstdint>
++#include <string>
++
++#include "Phase1Reports.h"
++
++namespace DRAMSim
++{
++enum class OutputState
++{
++    ALLOCATED,
++    PRODUCING,
++    READY_UNPUBLISHED,
++    PUBLISHED,
++    SUSPECT,
++    QUIESCED,
++    RESTORING,
++    REEXECUTING,
++    POISONED,
++    ABORTED
++};
++
++enum class ConsumerType
++{
++    HOST,
++    PIM
++};
++
++struct OutputHandle
++{
++    uint64_t version = 0;
++    bool valid = false;
++};
++
++const char* outputStateName(OutputState state);
++
++// G5 output-version state machine and consumer admission gate.  It has no
++// reference to fault schedules, golden output or storage internals.  Pause,
++// quiesce and restore transitions are deliberately not implemented here.
++class Phase1Runtime
++{
++  public:
++    explicit Phase1Runtime(uint64_t holdCycles = 0);
++
++    OutputHandle allocateOutput(uint64_t bytes, uint64_t cycle);
++    void beginProducing(OutputHandle handle, uint64_t cycle);
++    void producerComplete(OutputHandle handle, uint64_t cycle);
++    void onReport(const Phase1PublicReport& report, uint64_t cycle);
++    void tick(uint64_t cycle);
++
++    bool canConsume(OutputHandle handle, ConsumerType consumer, uint64_t cycle) const;
++    bool canAdmit(OutputHandle handle, ConsumerType consumer, uint64_t cycle) const;
++    bool consume(OutputHandle handle, ConsumerType consumer, uint64_t cycle);
++
++    // Fail-fast guard for test/evaluator bypass paths.  Normal host/PIM paths
++    // call canConsume/canAdmit before entering the storage model.
++    void assertConsumerAllowed(OutputHandle handle, ConsumerType consumer, uint64_t cycle) const;
++
++    OutputState state(OutputHandle handle) const;
++    bool isStale(OutputHandle handle) const;
++    bool isPublished(OutputHandle handle) const;
++
++    uint64_t currentVersion() const { return currentVersion_; }
++    uint64_t blockedConsumerReads() const { return blocked_consumer_reads_; }
++    uint64_t lateReports() const { return late_reports_; }
++    uint64_t lockCount() const { return lock_count_; }
++    uint64_t consumedReads() const { return consumed_reads_; }
++    uint64_t publishCycle() const { return publish_cycle_; }
++    uint64_t lockCycle() const { return lock_cycle_; }
++    uint64_t producerDoneCycle() const { return producer_done_cycle_; }
++    uint64_t publishReadyCycle() const { return publish_ready_cycle_; }
++
++  private:
++    struct Version
++    {
++        uint64_t version = 0;
++        uint64_t bytes = 0;
++        OutputState state = OutputState::ALLOCATED;
++        uint64_t allocated_cycle = 0;
++        uint64_t producer_done_cycle = 0;
++        uint64_t publish_ready_cycle = 0;
++        uint64_t publish_cycle = 0;
++        uint64_t lock_cycle = 0;
++        uint64_t consumed = 0;
++    };
++
++    Version& currentVersionRecord();
++    const Version& currentVersionRecord() const;
++    bool handleCurrent(OutputHandle handle) const;
++
++    uint64_t hold_cycles_ = 0;
++    uint64_t currentVersion_ = 0;
++    Version current_;
++    uint64_t blocked_consumer_reads_ = 0;
++    uint64_t late_reports_ = 0;
++    uint64_t lock_count_ = 0;
++    uint64_t consumed_reads_ = 0;
++    uint64_t publish_cycle_ = 0;
++    uint64_t lock_cycle_ = 0;
++    uint64_t producer_done_cycle_ = 0;
++    uint64_t publish_ready_cycle_ = 0;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Storage.cpp b/src/Phase1Storage.cpp
+new file mode 100644
+index 0000000..d82001f
+--- /dev/null
++++ b/src/Phase1Storage.cpp
+@@ -0,0 +1,97 @@
++#include "Phase1Storage.h"
++
++#include <sstream>
++#include <stdexcept>
++
++namespace DRAMSim
++{
++std::string phase1StorageKeyToString(const Phase1StorageKey& key)
++{
++    std::ostringstream os;
++    os << "ch=" << key.channel << ",rank=" << key.rank << ",bank=" << key.actual_bank
++       << ",row=" << key.row << ",burst_col=" << key.burst_column << ",cw=" << key.codeword_index;
++    return os.str();
++}
++
++const Phase1Storage::Entry& Phase1Storage::at(const Phase1StorageKey& key) const
++{
++    auto found = entries_.find(key);
++    if (found == entries_.end())
++        throw std::out_of_range("Phase1Storage key not initialized: " + phase1StorageKeyToString(key));
++    return found->second;
++}
++
++bool Phase1Storage::contains(const Phase1StorageKey& key) const
++{
++    return entries_.find(key) != entries_.end();
++}
++
++void Phase1Storage::initialize(const Phase1StorageKey& key, uint64_t data)
++{
++    Entry entry;
++    entry.data = data;
++    entry.parity = Phase1Ecc::encodeParity(data);
++    entry.ecc_valid = true;
++    entries_[key] = entry;
++}
++
++void Phase1Storage::writeLegal(const Phase1StorageKey& key, uint64_t data)
++{
++    initialize(key, data);
++}
++
++void Phase1Storage::writeUnprotected(const Phase1StorageKey& key, uint64_t data)
++{
++    Entry entry;
++    entry.data = data;
++    entry.parity = 0;
++    entry.ecc_valid = false;
++    entries_[key] = entry;
++}
++
++Phase1EccResult Phase1Storage::readProtected(const Phase1StorageKey& key) const
++{
++    const Entry& entry = at(key);
++    if (!entry.ecc_valid)
++    {
++        Phase1EccResult result;
++        result.data = entry.data;
++        result.status = Phase1EccStatus::UNPROTECTED_FORMAT;
++        result.syndrome = 0;
++        result.overall_parity = 0;
++        return result;
++    }
++    return Phase1Ecc::decode(entry.data, entry.parity);
++}
++
++uint64_t Phase1Storage::readRawData(const Phase1StorageKey& key) const
++{
++    return at(key).data;
++}
++
++uint8_t Phase1Storage::readRawParity(const Phase1StorageKey& key) const
++{
++    return at(key).parity;
++}
++
++void Phase1Storage::injectDataBit(const Phase1StorageKey& key, unsigned bit)
++{
++    if (bit >= 64)
++        throw std::out_of_range("Phase1Storage data bit must be in [0,63]");
++    auto found = entries_.find(key);
++    if (found == entries_.end())
++        throw std::out_of_range("Phase1Storage key not initialized: " + phase1StorageKeyToString(key));
++    found->second.data ^= (uint64_t(1) << bit);
++}
++
++void Phase1Storage::injectParityBit(const Phase1StorageKey& key, unsigned bit)
++{
++    if (bit >= 8)
++        throw std::out_of_range("Phase1Storage parity bit must be in [0,7]");
++    auto found = entries_.find(key);
++    if (found == entries_.end())
++        throw std::out_of_range("Phase1Storage key not initialized: " + phase1StorageKeyToString(key));
++    found->second.parity ^= static_cast<uint8_t>(1u << bit);
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Storage.h b/src/Phase1Storage.h
+new file mode 100644
+index 0000000..cdedd73
+--- /dev/null
++++ b/src/Phase1Storage.h
+@@ -0,0 +1,69 @@
++#ifndef PHASE1_STORAGE_H
++#define PHASE1_STORAGE_H
++
++#include <cstdint>
++#include <map>
++#include <string>
++
++#include "Phase1Ecc.h"
++
++namespace DRAMSim
++{
++// Stable storage identity for one 64-bit ECC codeword.  A 32 B burst has four
++// independent codewords; the caller supplies codeword_index 0..3.
++struct Phase1StorageKey
++{
++    unsigned channel = 0;
++    unsigned rank = 0;
++    unsigned actual_bank = 0;
++    unsigned row = 0;
++    unsigned burst_column = 0;
++    unsigned codeword_index = 0;
++
++    bool operator<(const Phase1StorageKey& rhs) const
++    {
++        if (channel != rhs.channel) return channel < rhs.channel;
++        if (rank != rhs.rank) return rank < rhs.rank;
++        if (actual_bank != rhs.actual_bank) return actual_bank < rhs.actual_bank;
++        if (row != rhs.row) return row < rhs.row;
++        if (burst_column != rhs.burst_column) return burst_column < rhs.burst_column;
++        return codeword_index < rhs.codeword_index;
++    }
++};
++
++std::string phase1StorageKeyToString(const Phase1StorageKey& key);
++
++// Research storage model with explicit raw data+parity metadata.  Reads do not
++// scrub; a persistent bit flip can therefore produce a CE on every read.
++// Mutation/raw-inspection methods are test/evaluator-only interfaces.
++class Phase1Storage
++{
++  public:
++    void initialize(const Phase1StorageKey& key, uint64_t data);
++    void writeLegal(const Phase1StorageKey& key, uint64_t data);
++    // PIM/HAB writeback in HOST_ONLY: raw data without a valid ECC format.
++    void writeUnprotected(const Phase1StorageKey& key, uint64_t data);
++    Phase1EccResult readProtected(const Phase1StorageKey& key) const;
++
++    bool contains(const Phase1StorageKey& key) const;
++    uint64_t readRawData(const Phase1StorageKey& key) const;
++    uint8_t readRawParity(const Phase1StorageKey& key) const;
++
++    // Test-only raw mutation.  These do not re-encode parity.
++    void injectDataBit(const Phase1StorageKey& key, unsigned bit);
++    void injectParityBit(const Phase1StorageKey& key, unsigned bit);
++
++  private:
++    struct Entry
++    {
++        uint64_t data = 0;
++        uint8_t parity = 0;
++        bool ecc_valid = false;
++    };
++
++    const Entry& at(const Phase1StorageKey& key) const;
++    std::map<Phase1StorageKey, Entry> entries_;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Phase1Trace.cpp b/src/Phase1Trace.cpp
+new file mode 100644
+index 0000000..0ec9fe5
+--- /dev/null
++++ b/src/Phase1Trace.cpp
+@@ -0,0 +1,72 @@
++#include "Phase1Trace.h"
++
++#include <iomanip>
++#include <stdexcept>
++
++namespace DRAMSim
++{
++namespace
++{
++std::string csvField(const std::string& value)
++{
++    if (value.find_first_of(",\"\n\r") == std::string::npos)
++        return value;
++    std::string quoted = "\"";
++    for (char c : value)
++    {
++        if (c == '"')
++            quoted += '"';
++        quoted += c;
++    }
++    quoted += '"';
++    return quoted;
++}
++
++std::string optionalInt(int value)
++{
++    if (value < 0)
++        return "";
++    return std::to_string(value);
++}
++}  // namespace
++
++Phase1Trace::Phase1Trace(const std::string& path, bool enabled) : enabled_(enabled)
++{
++    if (path.empty())
++        throw std::invalid_argument("Phase1Trace path is empty");
++    output_.open(path, std::ios::out | std::ios::trunc);
++    if (!output_)
++        throw std::runtime_error("cannot open Phase1Trace: " + path);
++    output_ << "event_seq,cycle,phase,event_type,kernel_id,version_id,access_id,channel,rank,"
++               "actual_bank,row,column,access_path,bytes,status\n";
++    output_.flush();
++}
++
++Phase1Trace::~Phase1Trace()
++{
++    if (output_)
++    {
++        output_.flush();
++        output_.close();
++    }
++}
++
++void Phase1Trace::event(uint64_t cycle, const std::string& phase, const std::string& eventType,
++                        const std::string& kernelId, const std::string& versionId,
++                        const std::string& accessId, int channel, int rank, int actualBank, int row,
++                        int column, const std::string& accessPath, int bytes,
++                        const std::string& status)
++{
++    if (!enabled_)
++        return;
++    ++sequence_;
++    output_ << sequence_ << ',' << cycle << ',' << csvField(phase) << ',' << csvField(eventType)
++            << ',' << csvField(kernelId) << ',' << csvField(versionId) << ','
++            << csvField(accessId) << ',' << optionalInt(channel) << ',' << optionalInt(rank) << ','
++            << optionalInt(actualBank) << ',' << optionalInt(row) << ',' << optionalInt(column)
++            << ',' << csvField(accessPath) << ',' << optionalInt(bytes) << ','
++            << csvField(status) << '\n';
++    output_.flush();
++}
++
++}  // namespace DRAMSim
+diff --git a/src/Phase1Trace.h b/src/Phase1Trace.h
+new file mode 100644
+index 0000000..593452c
+--- /dev/null
++++ b/src/Phase1Trace.h
+@@ -0,0 +1,34 @@
++#ifndef PHASE1_TRACE_H
++#define PHASE1_TRACE_H
++
++#include <cstdint>
++#include <fstream>
++#include <string>
++
++namespace DRAMSim
++{
++// Passive event writer for the Phase1 data protocol.  It never changes memory
++// state and is not consulted by the driver/runtime.  A disabled trace still
++// creates a header-only events.csv so every run has the same schema.
++class Phase1Trace
++{
++  public:
++    Phase1Trace(const std::string& path, bool enabled);
++    ~Phase1Trace();
++
++    bool enabled() const { return enabled_; }
++    uint64_t eventCount() const { return sequence_; }
++
++    void event(uint64_t cycle, const std::string& phase, const std::string& eventType,
++               const std::string& kernelId, const std::string& versionId,
++               const std::string& accessId, int channel, int rank, int actualBank, int row,
++               int column, const std::string& accessPath, int bytes, const std::string& status);
++
++  private:
++    std::ofstream output_;
++    bool enabled_ = false;
++    uint64_t sequence_ = 0;
++};
++}  // namespace DRAMSim
++
++#endif
+diff --git a/src/Rank.cpp b/src/Rank.cpp
+index 2e5b28c..da24ff1 100644
+--- a/src/Rank.cpp
++++ b/src/Rank.cpp
+@@ -64,11 +64,15 @@ Rank::Rank(ostream& simLog, Configuration& configuration)
+ void Rank::setChanId(int id)
+ {
+     this->chanId = id;
++    for (unsigned bank = 0; bank < banks.size(); bank++)
++        banks[bank].setIdentity(static_cast<unsigned>(chanId), static_cast<unsigned>(rankId), bank);
+ }
+ 
+ void Rank::setRankId(int id)
+ {
+     this->rankId = id;
++    for (unsigned bank = 0; bank < banks.size(); bank++)
++        banks[bank].setIdentity(static_cast<unsigned>(chanId), static_cast<unsigned>(rankId), bank);
+ }
+ 
+ int Rank::getChanId() const
+@@ -346,10 +350,10 @@ void Rank::readSb(BusPacket* packet)
+         else if (0x18 <= packet->column && packet->column <= 0x1f)
+             *(packet->data) = pimRank->pimBlocks[packet->bank / 2].grfB[packet->column - 0x18];
+         else
+-            banks[packet->bank].read(packet);
++            banks[packet->bank].read(packet, Phase1AccessType::HOST, currentClockCycle);
+     }
+     else
+-        banks[packet->bank].read(packet);
++        banks[packet->bank].read(packet, Phase1AccessType::HOST, currentClockCycle);
+ #endif
+ }
+ 
+@@ -369,7 +373,7 @@ void Rank::writeSb(BusPacket* packet)
+ 
+ #ifndef NO_STORAGE
+     if (!(packet->row == config.PIM_REG_RA) && !pimRank->isReservedRA(packet->row))
+-        banks[packet->bank].write(packet);
++        banks[packet->bank].write(packet, Phase1AccessType::HOST, currentClockCycle);
+ #endif
+ }
+ 
+@@ -457,6 +461,7 @@ void Rank::sendToBank(BusPacket* packet)
+ 
+         case REF:
+             refreshWaiting = false;
++            refreshCount++;
+             if (DEBUG_CMD_TRACE)
+             {
+                 PRINT(OUTLOG_CH_RA("REF"));
+diff --git a/src/Rank.h b/src/Rank.h
+index 1f22f13..1cd57ad 100644
+--- a/src/Rank.h
++++ b/src/Rank.h
+@@ -87,6 +87,7 @@ class Rank : public SimulatorObject
+     shared_ptr<PIMRank> pimRank;
+     unsigned dataCyclesLeft;
+     bool refreshWaiting;
++    uint64_t refreshCount = 0;
+ 
+     // these are vectors so that each element is per-bank
+     vector<BusPacket*> readReturnPacket;
+diff --git a/src/tests/Phase1EccTestCases.cpp b/src/tests/Phase1EccTestCases.cpp
+new file mode 100644
+index 0000000..c181e0d
+--- /dev/null
++++ b/src/tests/Phase1EccTestCases.cpp
+@@ -0,0 +1,264 @@
++#include <cstdlib>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "gtest/gtest.h"
++#include "Phase1Ecc.h"
++#include "Phase1Storage.h"
++
++using namespace DRAMSim;
++
++namespace
++{
++struct Pattern
++{
++    std::string name;
++    uint64_t data;
++};
++
++const std::vector<Pattern>& patterns()
++{
++    static const std::vector<Pattern> values = {
++        {"zeros", 0x0000000000000000ULL},
++        {"ones", 0xFFFFFFFFFFFFFFFFULL},
++        {"alt01", 0x5555555555555555ULL},
++        {"alt10", 0xAAAAAAAAAAAAAAAAULL},
++        {"rand0", 0x0123456789ABCDEFULL},
++        {"rand1", 0xFEDCBA9876543210ULL},
++        {"rand2", 0x0F1E2D3C4B5A6978ULL},
++        {"rand3", 0x8877665544332211ULL},
++    };
++    return values;
++}
++
++std::string hex64(uint64_t value)
++{
++    std::ostringstream os;
++    os << std::hex << std::setfill('0') << std::setw(16) << value;
++    return os.str();
++}
++
++std::string hex8(uint8_t value)
++{
++    std::ostringstream os;
++    os << std::hex << std::setfill('0') << std::setw(2) << static_cast<unsigned>(value);
++    return os.str();
++}
++
++std::string statusName(Phase1EccStatus status)
++{
++    switch (status)
++    {
++        case Phase1EccStatus::CLEAN:
++            return "CLEAN";
++        case Phase1EccStatus::CORRECTED:
++            return "CORRECTED";
++        case Phase1EccStatus::UNCORRECTABLE:
++            return "UNCORRECTABLE";
++        case Phase1EccStatus::INVALID:
++            return "INVALID";
++        case Phase1EccStatus::UNPROTECTED_FORMAT:
++            return "UNPROTECTED_FORMAT";
++    }
++    return "UNKNOWN";
++}
++
++std::array<unsigned, 72> codewordFrom(uint64_t data, uint8_t parity)
++{
++    std::array<unsigned, 72> bits{};
++    const auto& dataPositions = Phase1Ecc::dataBitPositions();
++    for (unsigned i = 0; i < 64; i++)
++        bits[dataPositions[i] - 1] = static_cast<unsigned>((data >> i) & 1u);
++    const auto& parityPositions = Phase1Ecc::hammingParityPositions();
++    for (unsigned i = 0; i < parityPositions.size(); i++)
++        bits[parityPositions[i] - 1] = (parity >> i) & 1u;
++    bits[71] = (parity >> 7) & 1u;
++    return bits;
++}
++
++void fromCodeword(const std::array<unsigned, 72>& bits, uint64_t& data, uint8_t& parity)
++{
++    data = 0;
++    const auto& dataPositions = Phase1Ecc::dataBitPositions();
++    for (unsigned i = 0; i < 64; i++)
++        data |= static_cast<uint64_t>(bits[dataPositions[i] - 1]) << i;
++    parity = 0;
++    const auto& parityPositions = Phase1Ecc::hammingParityPositions();
++    for (unsigned i = 0; i < parityPositions.size(); i++)
++        parity |= static_cast<uint8_t>(bits[parityPositions[i] - 1] << i);
++    parity |= static_cast<uint8_t>(bits[71] << 7);
++}
++
++std::string encodeKey(const Phase1StorageKey& key)
++{
++    return phase1StorageKeyToString(key);
++}
++
++void writeCsvRow(std::ostream& out, unsigned patternId, const Pattern& pattern, uint8_t parity,
++                 const std::string& kind, int bit1, int bit2, const Phase1EccResult& result,
++                 uint64_t original)
++{
++    out << patternId << ',' << pattern.name << ',' << hex64(pattern.data) << ',' << hex8(parity)
++        << ',' << kind << ',';
++    if (bit1 >= 0)
++        out << bit1;
++    out << ',';
++    if (bit2 >= 0)
++        out << bit2;
++    out << ',' << result.syndrome << ',' << result.overall_parity << ',' << statusName(result.status)
++        << ',' << hex64(result.data) << ',' << (result.data == original ? 1 : 0) << '\n';
++}
++}  // namespace
++
++TEST(Phase1Ecc, ExhaustiveSingleAndDoubleBit)
++{
++    const char* outputPath = std::getenv("PHASE1_ECC_OUT");
++    std::ofstream csv;
++    if (outputPath != nullptr && outputPath[0] != '\0')
++    {
++        csv.open(outputPath, std::ios::out | std::ios::trunc);
++        ASSERT_TRUE(csv) << "cannot open PHASE1_ECC_OUT=" << outputPath;
++        csv << "pattern_id,pattern_name,data_hex,parity_hex,flip_kind,bit1,bit2,syndrome,"
++               "overall_parity,status,corrected_hex,corrected_matches_original\n";
++    }
++
++    const auto& dataPositions = Phase1Ecc::dataBitPositions();
++    (void)dataPositions;
++    unsigned patternId = 0;
++    for (const Pattern& pattern : patterns())
++    {
++        const uint8_t parity = Phase1Ecc::encodeParity(pattern.data);
++        const auto originalCodeword = codewordFrom(pattern.data, parity);
++
++        const Phase1EccResult clean = Phase1Ecc::decode(pattern.data, parity);
++        ASSERT_EQ(Phase1EccStatus::CLEAN, clean.status);
++        ASSERT_EQ(pattern.data, clean.data);
++        ASSERT_EQ(0u, clean.syndrome);
++        ASSERT_EQ(0u, clean.overall_parity);
++        if (csv)
++            writeCsvRow(csv, patternId, pattern, parity, "none", -1, -1, clean, pattern.data);
++
++        for (unsigned position = 1; position <= 72; position++)
++        {
++            auto codeword = originalCodeword;
++            codeword[position - 1] ^= 1u;
++            uint64_t mutatedData = 0;
++            uint8_t mutatedParity = 0;
++            fromCodeword(codeword, mutatedData, mutatedParity);
++            const Phase1EccResult result = Phase1Ecc::decode(mutatedData, mutatedParity);
++            ASSERT_EQ(Phase1EccStatus::CORRECTED, result.status)
++                << "pattern=" << pattern.name << " single bit=" << position;
++            ASSERT_EQ(pattern.data, result.data)
++                << "pattern=" << pattern.name << " single bit=" << position;
++            if (csv)
++                writeCsvRow(csv, patternId, pattern, parity, "single", position, -1, result,
++                            pattern.data);
++        }
++
++        for (unsigned first = 1; first <= 72; first++)
++        {
++            for (unsigned second = first + 1; second <= 72; second++)
++            {
++                auto codeword = originalCodeword;
++                codeword[first - 1] ^= 1u;
++                codeword[second - 1] ^= 1u;
++                uint64_t mutatedData = 0;
++                uint8_t mutatedParity = 0;
++                fromCodeword(codeword, mutatedData, mutatedParity);
++                const Phase1EccResult result = Phase1Ecc::decode(mutatedData, mutatedParity);
++                ASSERT_EQ(Phase1EccStatus::UNCORRECTABLE, result.status)
++                    << "pattern=" << pattern.name << " double bits=" << first << "," << second;
++                if (csv)
++                    writeCsvRow(csv, patternId, pattern, parity, "double", first, second, result,
++                                pattern.data);
++            }
++        }
++        patternId++;
++    }
++}
++
++TEST(Phase1Storage, F1WitnessAndNoScrub)
++{
++    Phase1Storage storage;
++    Phase1StorageKey key;
++    key.channel = 0;
++    key.rank = 0;
++    key.actual_bank = 0;
++    key.row = 0;
++    key.burst_column = 0;
++    key.codeword_index = 0;
++    const uint64_t original = 0x0123456789ABCDEFULL;
++    storage.initialize(key, original);
++
++    const uint8_t parityBefore = storage.readRawParity(key);
++    storage.injectDataBit(key, 15);  // FP16 lane 0 sign bit within 64-bit codeword
++    const uint64_t rawAfter = storage.readRawData(key);
++    ASSERT_NE(original, rawAfter);
++    ASSERT_EQ(parityBefore, storage.readRawParity(key));
++
++    const Phase1EccResult first = storage.readProtected(key);
++    ASSERT_EQ(Phase1EccStatus::CORRECTED, first.status);
++    ASSERT_EQ(original, first.data);
++    ASSERT_EQ(original, storage.readProtected(key).data);
++    ASSERT_EQ(Phase1EccStatus::CORRECTED, storage.readProtected(key).status);
++    ASSERT_EQ(rawAfter, storage.readRawData(key));  // no automatic scrub
++
++    storage.writeLegal(key, original);
++    const Phase1EccResult afterWrite = storage.readProtected(key);
++    ASSERT_EQ(Phase1EccStatus::CLEAN, afterWrite.status);
++    ASSERT_EQ(original, afterWrite.data);
++
++    const char* witnessPath = std::getenv("PHASE1_G3_WITNESS");
++    if (witnessPath != nullptr && witnessPath[0] != '\0')
++    {
++        std::ofstream witness(witnessPath, std::ios::out | std::ios::trunc);
++        ASSERT_TRUE(witness) << "cannot open PHASE1_G3_WITNESS=" << witnessPath;
++        witness << "{\n"
++                << "  \"key\": \"" << encodeKey(key) << "\",\n"
++                << "  \"f1_data_bit\": 15,\n"
++                << "  \"data_before_hex\": \"" << hex64(original) << "\",\n"
++                << "  \"raw_after_injection_hex\": \"" << hex64(rawAfter) << "\",\n"
++                << "  \"parity_hex\": \"" << hex8(parityBefore) << "\",\n"
++                << "  \"status\": \"CORRECTED\",\n"
++                << "  \"corrected_data_hex\": \"" << hex64(first.data) << "\",\n"
++                << "  \"corrected_equals_original\": true,\n"
++                << "  \"second_read_status\": \"CORRECTED\",\n"
++                << "  \"scrubbed\": false,\n"
++                << "  \"legal_write_status\": \"CLEAN\"\n"
++                << "}\n";
++    }
++}
++
++TEST(Phase1Storage, DoubleBitAndReencode)
++{
++    Phase1Storage storage;
++    Phase1StorageKey key;
++    key.channel = 0;
++    key.rank = 0;
++    key.actual_bank = 3;
++    key.row = 7;
++    key.burst_column = 1;
++    key.codeword_index = 2;
++    const uint64_t original = 0x0F1E2D3C4B5A6978ULL;
++    storage.initialize(key, original);
++    storage.injectDataBit(key, 0);
++    storage.injectDataBit(key, 1);
++    const Phase1EccResult doubleBit = storage.readProtected(key);
++    ASSERT_EQ(Phase1EccStatus::UNCORRECTABLE, doubleBit.status);
++
++    storage.writeLegal(key, original);
++    const Phase1EccResult afterWrite = storage.readProtected(key);
++    ASSERT_EQ(Phase1EccStatus::CLEAN, afterWrite.status);
++    ASSERT_EQ(original, afterWrite.data);
++
++    Phase1StorageKey other = key;
++    other.codeword_index = 3;
++    storage.initialize(other, 0xFEDCBA9876543210ULL);
++    storage.injectDataBit(other, 63);
++    ASSERT_EQ(Phase1EccStatus::CORRECTED, storage.readProtected(other).status);
++    ASSERT_EQ(Phase1EccStatus::CLEAN, storage.readProtected(key).status);
++}
+diff --git a/src/tests/Phase1G4TestCases.cpp b/src/tests/Phase1G4TestCases.cpp
+new file mode 100644
+index 0000000..baad8e6
+--- /dev/null
++++ b/src/tests/Phase1G4TestCases.cpp
+@@ -0,0 +1,449 @@
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <iomanip>
++#include <iostream>
++#include <map>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "gtest/gtest.h"
++#include "tests/PIMKernel.h"
++#include "Phase1Address.h"
++#include "Phase1Driver.h"
++#include "Phase1Reports.h"
++#include "Phase1Storage.h"
++#include "Phase1Trace.h"
++
++using namespace DRAMSim;
++
++namespace
++{
++std::string trim(const std::string& input)
++{
++    const std::string ws = " \t\r\n";
++    const std::size_t first = input.find_first_not_of(ws);
++    if (first == std::string::npos)
++        return "";
++    const std::size_t last = input.find_last_not_of(ws);
++    return input.substr(first, last - first + 1);
++}
++
++std::map<std::string, std::string> readParams(const std::string& path)
++{
++    std::ifstream input(path);
++    if (!input)
++        throw std::runtime_error("cannot open G4 params: " + path);
++    std::map<std::string, std::string> values;
++    std::string line;
++    while (std::getline(input, line))
++    {
++        line = trim(line);
++        if (line.empty() || line[0] == ';' || line[0] == '#')
++            continue;
++        const std::size_t eq = line.find('=');
++        if (eq == std::string::npos)
++            throw std::runtime_error("malformed G4 param line");
++        values[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
++    }
++    return values;
++}
++
++std::string get(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    auto it = p.find(key);
++    if (it == p.end())
++        throw std::runtime_error("missing G4 param: " + key);
++    return it->second;
++}
++
++unsigned getU(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    return static_cast<unsigned>(std::stoul(get(p, key)));
++}
++
++std::string join(const std::string& dir, const std::string& name)
++{
++    if (dir.empty())
++        return name;
++    return (dir.back() == '/') ? dir + name : dir + "/" + name;
++}
++
++std::string hex64(uint64_t value)
++{
++    std::ostringstream os;
++    os << std::hex << std::setfill('0') << std::setw(16) << value;
++    return os.str();
++}
++
++std::string jsonEscape(const std::string& s)
++{
++    std::string out;
++    for (char c : s)
++    {
++        if (c == '"' || c == '\\')
++            out += '\\';
++        out += c;
++    }
++    return out;
++}
++
++std::string packetStatusName(Phase1PacketStatus status)
++{
++    switch (status)
++    {
++        case Phase1PacketStatus::OK: return "OK";
++        case Phase1PacketStatus::CORRECTED: return "CORRECTED";
++        case Phase1PacketStatus::UNPROTECTED_FORMAT: return "UNPROTECTED_FORMAT";
++        case Phase1PacketStatus::UNCORRECTABLE: return "UNCORRECTABLE";
++    }
++    return "UNKNOWN";
++}
++
++void configureBanks(MultiChannelMemorySystem& memory, Phase1Profile profile,
++                    Phase1ReportSink* sink, unsigned numBanks)
++{
++    for (MemorySystem* channel : memory.channels)
++    {
++        for (Rank* rank : *channel->ranks)
++        {
++            for (unsigned bank = 0; bank < numBanks; bank++)
++                rank->banks[bank].setPhase1(profile, sink);
++        }
++    }
++}
++
++struct RunOutcome
++{
++    bool timeout = false;
++    uint64_t cycles = 0;
++};
++
++bool memoryIdle(MultiChannelMemorySystem& memory)
++{
++    return Phase1Driver::directIdle(memory);
++}
++
++RunOutcome runMemory(MultiChannelMemorySystem& memory, Phase1Reports& reports,
++                     uint64_t watchdog)
++{
++    RunOutcome outcome;
++    while (!memoryIdle(memory) || reports.pendingCount() > 0)
++    {
++        if (outcome.cycles >= watchdog)
++        {
++            outcome.timeout = true;
++            break;
++        }
++        memory.update();
++        reports.tick(memory.currentClockCycle);
++        outcome.cycles++;
++    }
++    return outcome;
++}
++
++void hostWrite(MultiChannelMemorySystem& memory, uint64_t address, const BurstType& payload,
++               Phase1Reports& reports, uint64_t watchdog)
++{
++    if (!memory.addTransaction(true, address, const_cast<BurstType*>(&payload)))
++        throw std::runtime_error("host write was not accepted");
++    if (!memory.addBarrier(0))
++        throw std::runtime_error("host write barrier was not accepted");
++    RunOutcome outcome = runMemory(memory, reports, watchdog);
++    if (outcome.timeout)
++        throw std::runtime_error("host write timed out");
++}
++
++BurstType hostRead(MultiChannelMemorySystem& memory, uint64_t address, Phase1Reports& reports,
++                   uint64_t watchdog)
++{
++    BurstType result;
++    if (!memory.addTransaction(false, address, &result))
++        throw std::runtime_error("host read was not accepted");
++    if (!memory.addBarrier(0))
++        throw std::runtime_error("host read barrier was not accepted");
++    RunOutcome outcome = runMemory(memory, reports, watchdog);
++    if (outcome.timeout)
++        throw std::runtime_error("host read timed out");
++    return result;
++}
++
++unsigned bankParity(unsigned bank)
++{
++    return bank & 1u;
++}
++
++unsigned bankPimBlock(unsigned bank)
++{
++    return bank / 2u;
++}
++
++BurstType pimRead(MultiChannelMemorySystem& memory, unsigned targetBank, Phase1PacketStatus& status,
++                  Phase1Reports& reports, uint64_t watchdog)
++{
++    Rank* rank = (*memory.channels[0]->ranks)[0];
++    BurstType scratch;
++    BurstType result;
++    BusPacket packet(READ, 0, 0, 0, 0, bankParity(targetBank), &scratch, memory.getLogFile());
++    rank->pimRank->readOpd(bankPimBlock(targetBank), result,
++                           bankParity(targetBank) ? PIMOpdType::ODD_BANK : PIMOpdType::EVEN_BANK,
++                           &packet, 0, false, false);
++    status = packet.phase1_status;
++    RunOutcome outcome = runMemory(memory, reports, watchdog);
++    if (outcome.timeout)
++        throw std::runtime_error("PIM read timed out");
++    return result;
++}
++
++void pimWrite(MultiChannelMemorySystem& memory, unsigned targetBank, const BurstType& payload,
++              Phase1Reports& reports, uint64_t watchdog)
++{
++    Rank* rank = (*memory.channels[0]->ranks)[0];
++    BurstType scratch;
++    BusPacket packet(WRITE, 0, 0, 0, 0, bankParity(targetBank), &scratch, memory.getLogFile());
++    rank->pimRank->writeOpd(bankPimBlock(targetBank), const_cast<BurstType&>(payload),
++                            bankParity(targetBank) ? PIMOpdType::ODD_BANK : PIMOpdType::EVEN_BANK,
++                            &packet, 0, false, false);
++    RunOutcome outcome = runMemory(memory, reports, watchdog);
++    if (outcome.timeout)
++        throw std::runtime_error("PIM write timed out");
++}
++
++void inject(Bank& bank, const std::string& fault, unsigned targetLane, unsigned dataBitInLane,
++            unsigned faultBit2)
++{
++    if (fault == "F1")
++    {
++        const unsigned bit = targetLane * 16u + dataBitInLane;
++        bank.injectRawDataBit(0, 0, bit);
++    }
++    else if (fault == "F2")
++    {
++        const unsigned codeword = targetLane / 4u;
++        bank.injectRawDataBit(0, 0, codeword * 64u);
++        bank.injectRawDataBit(0, 0, codeword * 64u + faultBit2);
++    }
++}
++
++void writeTruth(const std::string& path, const std::string& fault, unsigned targetBank,
++                unsigned targetLane, unsigned dataBitInLane, unsigned faultBit2,
++                uint64_t faultCycle, const std::string& accessPath, const BurstType& original)
++{
++    std::ofstream out(path);
++    if (!out)
++        throw std::runtime_error("cannot open truth.csv: " + path);
++    out << "record_type,detection_id,fault_id,fault_cycle,storage_key,codeword_index,"
++           "bit_positions,raw_before,raw_after,target_access_id,detect_cycle,decoder_status,"
++           "eligible_report_id,dropped\n";
++    if (fault == "F0")
++        return;
++    unsigned bit = targetLane * 16u + dataBitInLane;
++    unsigned codeword = bit / 64u;
++    unsigned bitInWord = bit % 64u;
++    std::string bits = std::to_string(bitInWord);
++    if (fault == "F2")
++    {
++        codeword = targetLane / 4u;
++        bitInWord = 0;
++        bits = "0|" + std::to_string(faultBit2);
++    }
++    uint64_t before = 0;
++    std::memcpy(&before, &original.u8Data_[codeword * 8], sizeof(before));
++    uint64_t after = before;
++    if (fault == "F1")
++        after ^= (uint64_t(1) << bitInWord);
++    else
++        after ^= (uint64_t(1) << 0) ^ (uint64_t(1) << faultBit2);
++    std::ostringstream key;
++    key << "ch=0,rank=0,bank=" << targetBank << ",row=0,burst_col=0,cw=" << codeword;
++    out << "INJECTION,," << fault << ',' << faultCycle << ",\"" << key.str() << "\","
++        << codeword << ',' << bits << ',' << hex64(before) << ',' << hex64(after) << ','
++        << accessPath << ",,,,\n";
++}
++
++void writeJson(const std::string& path, const std::string& profile, const std::string& pathName,
++               const std::string& fault, unsigned targetBank, const std::string& granularity,
++               uint64_t delay, uint64_t interval, const RunOutcome& outcome,
++               const Phase1Reports& reports, const BurstType& output, const BurstType& original,
++               bool formatInvalid, Phase1PacketStatus packetStatus)
++{
++    const bool equal = (std::memcmp(output.u8Data_, original.u8Data_, sizeof(output.u8Data_)) == 0);
++    std::ofstream out(path);
++    if (!out)
++        throw std::runtime_error("cannot open G4 metrics: " + path);
++    out << "{\n"
++        << "  \"profile\": \"" << jsonEscape(profile) << "\",\n"
++        << "  \"path\": \"" << jsonEscape(pathName) << "\",\n"
++        << "  \"fault_kind\": \"" << jsonEscape(fault) << "\",\n"
++        << "  \"target_bank\": " << targetBank << ",\n"
++        << "  \"granularity\": \"" << jsonEscape(granularity) << "\",\n"
++        << "  \"transport_delay_cycles\": " << delay << ",\n"
++        << "  \"service_interval_cycles\": " << interval << ",\n"
++        << "  \"cycles\": " << outcome.cycles << ",\n"
++        << "  \"timeout\": " << (outcome.timeout ? "true" : "false") << ",\n"
++        << "  \"internal_detections\": " << reports.internalDetections() << ",\n"
++        << "  \"internal_ce\": " << reports.internalCe() << ",\n"
++        << "  \"internal_ue\": " << reports.internalUe() << ",\n"
++        << "  \"delivered_reports\": " << reports.delivered() << ",\n"
++        << "  \"dropped_reports\": " << reports.dropped() << ",\n"
++        << "  \"max_queue_depth\": " << reports.maxQueueDepth() << ",\n"
++        << "  \"format_events\": " << reports.formatEvents() << ",\n"
++        << "  \"format_invalid\": " << (formatInvalid ? "true" : "false") << ",\n"
++        << "  \"packet_status\": \"" << packetStatusName(packetStatus) << "\",\n"
++        << "  \"output_equals_original\": " << (equal ? "true" : "false") << ",\n"
++        << "  \"report_latencies\": [";
++    const auto& latencies = reports.reportLatencies();
++    for (std::size_t i = 0; i < latencies.size(); i++)
++    {
++        if (i) out << ",";
++        out << latencies[i];
++    }
++    out << "],\n"
++        << "  \"report_classes\": [";
++    const auto& publicReports = reports.reports();
++    for (std::size_t i = 0; i < publicReports.size(); i++)
++    {
++        if (i) out << ",";
++        out << "\"" << publicReports[i].error_class << "\"";
++    }
++    out << "]\n}\n";
++}
++}  // namespace
++
++TEST(Phase1G4Fixture, RunCase)
++{
++    const char* configPath = std::getenv("PHASE1_CONFIG");
++    const char* outputPath = std::getenv("PHASE1_OUT");
++    if (configPath == nullptr)
++        GTEST_SKIP() << "PHASE1_CONFIG is not set";
++    ASSERT_NE(nullptr, outputPath) << "PHASE1_OUT is not set";
++    const std::string outputDir(outputPath);
++
++    try
++    {
++        const auto params = readParams(configPath);
++        const std::string deviceIni = get(params, "device_ini");
++        const std::string systemIni = get(params, "system_ini");
++        const std::string profileName = get(params, "profile");
++        const std::string path = get(params, "path");
++        const std::string fault = get(params, "fault_kind");
++        const std::string granularity = get(params, "granularity");
++        const unsigned targetBank = getU(params, "target_bank");
++        const unsigned targetLane = getU(params, "target_lane");
++        const unsigned dataBitInLane = getU(params, "data_bit_in_lane");
++        const unsigned faultBit2 = getU(params, "fault_bit2");
++        const uint64_t delay = std::stoull(get(params, "transport_delay_cycles"));
++        const uint64_t interval = std::stoull(get(params, "service_interval_cycles"));
++        const unsigned queueCapacity = getU(params, "report_queue_capacity");
++        const uint64_t watchdog = std::stoull(get(params, "watchdog_cycles"));
++
++        Phase1Profile profile = Phase1Profile::NATIVE;
++        if (profileName == "NATIVE") profile = Phase1Profile::NATIVE;
++        else if (profileName == "LOCAL_VISIBLE") profile = Phase1Profile::LOCAL_VISIBLE;
++        else if (profileName == "LOCAL_HIDDEN") profile = Phase1Profile::LOCAL_HIDDEN;
++        else if (profileName == "HOST_ONLY") profile = Phase1Profile::HOST_ONLY;
++        else throw std::runtime_error("invalid profile");
++
++        auto memory = std::make_shared<MultiChannelMemorySystem>(
++            deviceIni, systemIni, ".", "phase1_g4", 256);
++        memory->setCPUClockSpeed(0);
++        Phase1Geometry geometry = Phase1Address::fromConfiguration();
++        ASSERT_EQ(1u, geometry.num_channels);
++        ASSERT_EQ(1u, geometry.num_ranks);
++        ASSERT_LT(targetBank, geometry.num_banks);
++        Phase1Address codec(geometry);
++
++        const bool deliverCe = profile != Phase1Profile::NATIVE &&
++                               profile != Phase1Profile::LOCAL_HIDDEN;
++        const bool deliverUe = profile != Phase1Profile::NATIVE;
++        Phase1Reports reports(codec, geometry.num_channels, geometry.num_banks, granularity, delay,
++                              interval, queueCapacity, deliverCe, deliverUe);
++        configureBanks(*memory, profile, &reports, geometry.num_banks);
++
++        Phase1AddrTuple tuple;
++        tuple.channel = 0;
++        tuple.rank = 0;
++        tuple.bank = targetBank;
++        tuple.row = 0;
++        tuple.burst_column = 0;
++        const uint64_t address = codec.encode(tuple);
++
++        BurstType original;
++        for (unsigned lane = 0; lane < 16; lane++)
++            original.fp16Data_[lane] = convertF2H(static_cast<float>(lane + 1) / 8.0f);
++
++        BurstType output;
++        Phase1PacketStatus packetStatus = Phase1PacketStatus::OK;
++        uint64_t faultCycle = 0;
++        if (path == "HREAD" || path == "HREAD_BURST")
++        {
++            hostWrite(*memory, address, original, reports, watchdog);
++            if (fault != "F0") inject((*memory->channels[0]->ranks)[0]->banks[targetBank], fault,
++                                      targetLane, dataBitInLane, faultBit2);
++                faultCycle = memory->currentClockCycle;
++            if (path == "HREAD_BURST")
++            {
++                const unsigned reads = getU(params, "repeat_reads");
++                std::vector<BurstType> receive(reads);
++                for (unsigned i = 0; i < reads; i++)
++                    ASSERT_TRUE(memory->addTransaction(false, address, &receive[i]));
++                if (!memory->addBarrier(0))
++                    throw std::runtime_error("burst read barrier was not accepted");
++                RunOutcome outcome = runMemory(*memory, reports, watchdog);
++                ASSERT_FALSE(outcome.timeout);
++                output = receive.back();
++            }
++            else
++            {
++                output = hostRead(*memory, address, reports, watchdog);
++            }
++        }
++        else if (path == "PREAD")
++        {
++            hostWrite(*memory, address, original, reports, watchdog);
++            if (fault != "F0") inject((*memory->channels[0]->ranks)[0]->banks[targetBank], fault,
++                                      targetLane, dataBitInLane, faultBit2);
++                faultCycle = memory->currentClockCycle;
++            output = pimRead(*memory, targetBank, packetStatus, reports, watchdog);
++        }
++        else if (path == "PWRITE_HREAD")
++        {
++            pimWrite(*memory, targetBank, original, reports, watchdog);
++            if (fault != "F0") inject((*memory->channels[0]->ranks)[0]->banks[targetBank], fault,
++                                      targetLane, dataBitInLane, faultBit2);
++                faultCycle = memory->currentClockCycle;
++            output = hostRead(*memory, address, reports, watchdog);
++        }
++        else if (path == "PWRITE_PREAD")
++        {
++            pimWrite(*memory, targetBank, original, reports, watchdog);
++            if (fault != "F0") inject((*memory->channels[0]->ranks)[0]->banks[targetBank], fault,
++                                      targetLane, dataBitInLane, faultBit2);
++                faultCycle = memory->currentClockCycle;
++            output = pimRead(*memory, targetBank, packetStatus, reports, watchdog);
++        }
++        else
++        {
++            FAIL() << "invalid path";
++        }
++
++        reports.writeCsv(join(outputDir, "reports.csv"));
++        Phase1Trace events(join(outputDir, "events.csv"), false);  // G4 does not use feeder events
++        const std::string outputFile = join(outputDir, "output.bin");
++        std::ofstream bin(outputFile, std::ios::binary);
++        bin.write(reinterpret_cast<const char*>(output.u8Data_), sizeof(output.u8Data_));
++        bin.close();
++        writeTruth(join(outputDir, "truth.csv"), fault, targetBank, targetLane, dataBitInLane,
++                   faultBit2, faultCycle, path, original);
++        writeJson(join(outputDir, "metrics.json"), profileName, path, fault, targetBank, granularity,
++                  delay, interval, RunOutcome{false, memory->currentClockCycle}, reports, output,
++                  original, reports.formatEvents() > 0 ||
++                                   packetStatus == Phase1PacketStatus::UNPROTECTED_FORMAT,
++                  packetStatus);
++    }
++    catch (const std::exception& error)
++    {
++        FAIL() << "G4 case failed: " << error.what();
++    }
++}
+diff --git a/src/tests/Phase1G5TestCases.cpp b/src/tests/Phase1G5TestCases.cpp
+new file mode 100644
+index 0000000..5a3aa5c
+--- /dev/null
++++ b/src/tests/Phase1G5TestCases.cpp
+@@ -0,0 +1,417 @@
++#include <cstdlib>
++#include <fstream>
++#include <iomanip>
++#include <map>
++#include <sstream>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++#include "gtest/gtest.h"
++#include "tests/PIMKernel.h"
++#include "Phase1Address.h"
++#include "Phase1Driver.h"
++#include "Phase1Reports.h"
++#include "Phase1Runtime.h"
++#include "Phase1Trace.h"
++
++using namespace DRAMSim;
++
++namespace
++{
++std::string trim(const std::string& input)
++{
++    const std::string ws = " \t\r\n";
++    const std::size_t first = input.find_first_not_of(ws);
++    if (first == std::string::npos)
++        return "";
++    const std::size_t last = input.find_last_not_of(ws);
++    return input.substr(first, last - first + 1);
++}
++
++std::map<std::string, std::string> readParams(const std::string& path)
++{
++    std::ifstream input(path);
++    if (!input)
++        throw std::runtime_error("cannot open G5 params: " + path);
++    std::map<std::string, std::string> values;
++    std::string line;
++    while (std::getline(input, line))
++    {
++        line = trim(line);
++        if (line.empty() || line[0] == ';' || line[0] == '#')
++            continue;
++        const std::size_t eq = line.find('=');
++        if (eq == std::string::npos)
++            throw std::runtime_error("malformed G5 param line");
++        values[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
++    }
++    return values;
++}
++
++std::string get(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    auto it = p.find(key);
++    if (it == p.end())
++        throw std::runtime_error("missing G5 param: " + key);
++    return it->second;
++}
++
++unsigned getU(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    return static_cast<unsigned>(std::stoul(get(p, key)));
++}
++
++std::string join(const std::string& dir, const std::string& name)
++{
++    if (dir.empty())
++        return name;
++    return (dir.back() == '/') ? dir + name : dir + "/" + name;
++}
++
++std::string stateName(Phase1Runtime& runtime, OutputHandle handle)
++{
++    return outputStateName(runtime.state(handle));
++}
++
++Phase1PublicReport makeReport(const std::string& errorClass, uint64_t cycle)
++{
++    Phase1PublicReport report;
++    report.report_seq = 1;
++    report.report_cycle = cycle;
++    report.error_class = errorClass;
++    report.region_type = "bank";
++    report.region_id = 0;
++    return report;
++}
++
++void configureBanks(MultiChannelMemorySystem& memory, Phase1ReportSink* sink, unsigned numBanks)
++{
++    for (MemorySystem* channel : memory.channels)
++        for (Rank* rank : *channel->ranks)
++            for (unsigned bank = 0; bank < numBanks; bank++)
++                rank->banks[bank].setPhase1(Phase1Profile::LOCAL_VISIBLE, sink);
++}
++
++struct LoopStats
++{
++    uint64_t cycles = 0;
++    bool timeout = false;
++};
++
++LoopStats runWithReports(MultiChannelMemorySystem& memory, Phase1Reports& reports,
++                         Phase1Runtime& runtime, size_t& consumedReports, uint64_t watchdog,
++                         bool stopWhenOutputTerminal)
++{
++    LoopStats stats;
++    while (!Phase1Driver::directIdle(memory) || reports.pendingCount() > 0)
++    {
++        if (stats.cycles >= watchdog)
++        {
++            stats.timeout = true;
++            break;
++        }
++        memory.update();
++        reports.tick(memory.currentClockCycle);
++        while (consumedReports < reports.reports().size())
++        {
++            const Phase1PublicReport& report = reports.reports()[consumedReports++];
++            runtime.onReport(report, report.report_cycle);
++        }
++        runtime.tick(memory.currentClockCycle);
++        stats.cycles++;
++        (void)stopWhenOutputTerminal;
++    }
++    return stats;
++}
++
++std::string hex64(uint64_t value)
++{
++    std::ostringstream os;
++    os << std::hex << std::setfill('0') << std::setw(16) << value;
++    return os.str();
++}
++
++void writeTruth(const std::string& path, const std::string& fault, uint64_t faultCycle,
++                const BurstType& source)
++{
++    std::ofstream out(path);
++    out << "record_type,detection_id,fault_id,fault_cycle,storage_key,codeword_index,"
++           "bit_positions,raw_before,raw_after,target_access_id,detect_cycle,decoder_status,"
++           "eligible_report_id,dropped\n";
++    if (fault == "F0")
++        return;
++    uint64_t before = 0;
++    std::memcpy(&before, &source.u8Data_[0], sizeof(before));
++    uint64_t after = before;
++    std::string bits = "15";
++    if (fault == "F1")
++        after ^= (uint64_t(1) << 15);
++    else
++    {
++        after ^= (uint64_t(1) << 0) ^ (uint64_t(1) << 1);
++        bits = "0|1";
++    }
++    out << "INJECTION,," << fault << ',' << faultCycle
++        << ",\"ch=0,rank=0,bank=0,row=0,burst_col=0,cw=0\",0," << bits << ','
++        << hex64(before) << ',' << hex64(after) << ",W1,,,,\n";
++}
++
++void writeMetrics(const std::string& path, const std::string& fault, unsigned nTiles,
++                  unsigned hold, const std::string& consumer, const std::string& stateAfterProducer,
++                  const std::string& stateAfterHold, bool published, bool hostAdmitted,
++                  bool pimAdmitted, bool hostBlocked, bool pimBlocked, bool bypassAssert,
++                  bool lateReport, uint64_t publishCycle, uint64_t lockCycle,
++                  uint64_t producerCycles, const Phase1Reports& reports, bool timeout)
++{
++    std::ofstream out(path);
++    if (!out)
++        throw std::runtime_error("cannot open G5 metrics: " + path);
++    out << "{\n"
++        << "  \"fault_kind\": \"" << fault << "\",\n"
++        << "  \"n_tiles\": " << nTiles << ",\n"
++        << "  \"hold_cycles\": " << hold << ",\n"
++        << "  \"consumer\": \"" << consumer << "\",\n"
++        << "  \"state_after_producer\": \"" << stateAfterProducer << "\",\n"
++        << "  \"state_after_hold\": \"" << stateAfterHold << "\",\n"
++        << "  \"published\": " << (published ? "true" : "false") << ",\n"
++        << "  \"host_admitted\": " << (hostAdmitted ? "true" : "false") << ",\n"
++        << "  \"pim_admitted\": " << (pimAdmitted ? "true" : "false") << ",\n"
++        << "  \"host_blocked\": " << (hostBlocked ? "true" : "false") << ",\n"
++        << "  \"pim_blocked\": " << (pimBlocked ? "true" : "false") << ",\n"
++        << "  \"bypass_assert\": " << (bypassAssert ? "true" : "false") << ",\n"
++        << "  \"late_report\": " << (lateReport ? "true" : "false") << ",\n"
++        << "  \"producer_cycles\": " << producerCycles << ",\n"
++        << "  \"publish_cycle\": " << publishCycle << ",\n"
++        << "  \"lock_cycle\": " << lockCycle << ",\n"
++        << "  \"internal_detections\": " << reports.internalDetections() << ",\n"
++        << "  \"internal_ce\": " << reports.internalCe() << ",\n"
++        << "  \"internal_ue\": " << reports.internalUe() << ",\n"
++        << "  \"delivered_reports\": " << reports.delivered() << ",\n"
++        << "  \"report_drops\": " << reports.dropped() << ",\n"
++        << "  \"timeout\": " << (timeout ? "true" : "false") << "\n"
++        << "}\n";
++}
++}  // namespace
++
++TEST(Phase1Runtime, SameCycleAndStaleHandles)
++{
++    // Report one cycle before planned publish.
++    Phase1Runtime before(5);
++    OutputHandle h1 = before.allocateOutput(32, 0);
++    before.beginProducing(h1, 0);
++    before.producerComplete(h1, 10);
++    before.onReport(makeReport("CE", 14), 14);
++    before.tick(15);
++    EXPECT_EQ(OutputState::SUSPECT, before.state(h1));
++    EXPECT_FALSE(before.isPublished(h1));
++
++    // Report in the publish cycle, before runtime tick: report wins.
++    Phase1Runtime same(5);
++    OutputHandle h2 = same.allocateOutput(32, 0);
++    same.beginProducing(h2, 0);
++    same.producerComplete(h2, 10);
++    same.onReport(makeReport("CE", 15), 15);
++    same.tick(15);
++    EXPECT_EQ(OutputState::SUSPECT, same.state(h2));
++    EXPECT_FALSE(same.isPublished(h2));
++    EXPECT_EQ(0u, same.publishCycle());
++
++    // No report: publish at the ready cycle; a later report is late.
++    Phase1Runtime late(5);
++    OutputHandle h3 = late.allocateOutput(32, 0);
++    late.beginProducing(h3, 0);
++    late.producerComplete(h3, 10);
++    late.tick(15);
++    EXPECT_EQ(OutputState::PUBLISHED, late.state(h3));
++    late.onReport(makeReport("CE", 16), 16);
++    EXPECT_EQ(OutputState::PUBLISHED, late.state(h3));
++    EXPECT_EQ(1u, late.lateReports());
++
++    // Stale handle after a new output version.
++    Phase1Runtime versioned(0);
++    OutputHandle oldHandle = versioned.allocateOutput(32, 0);
++    versioned.beginProducing(oldHandle, 0);
++    versioned.producerComplete(oldHandle, 0);
++    versioned.tick(0);
++    ASSERT_EQ(OutputState::PUBLISHED, versioned.state(oldHandle));
++    OutputHandle newHandle = versioned.allocateOutput(32, 1);
++    EXPECT_TRUE(versioned.isStale(oldHandle));
++    EXPECT_FALSE(versioned.isStale(newHandle));
++    EXPECT_FALSE(versioned.canConsume(oldHandle, ConsumerType::HOST, 2));
++    EXPECT_THROW(versioned.assertConsumerAllowed(oldHandle, ConsumerType::HOST, 2),
++                 std::logic_error);
++
++    // Unpublished host/PIM consumers are blocked; bypass guard fails fast.
++    Phase1Runtime blocked(5);
++    OutputHandle unpublished = blocked.allocateOutput(32, 0);
++    blocked.beginProducing(unpublished, 0);
++    blocked.producerComplete(unpublished, 1);
++    EXPECT_FALSE(blocked.canConsume(unpublished, ConsumerType::HOST, 2));
++    EXPECT_FALSE(blocked.canAdmit(unpublished, ConsumerType::PIM, 2));
++    EXPECT_THROW(blocked.assertConsumerAllowed(unpublished, ConsumerType::HOST, 2),
++                 std::logic_error);
++    EXPECT_FALSE(blocked.consume(unpublished, ConsumerType::HOST, 2));
++    EXPECT_EQ(1u, blocked.blockedConsumerReads());
++}
++
++TEST(Phase1G5Fixture, RunCase)
++{
++    const char* configPath = std::getenv("PHASE1_CONFIG");
++    const char* outputPath = std::getenv("PHASE1_OUT");
++    if (configPath == nullptr)
++        GTEST_SKIP() << "PHASE1_CONFIG is not set";
++    ASSERT_NE(nullptr, outputPath);
++    const std::string outputDir(outputPath);
++
++    try
++    {
++        const auto params = readParams(configPath);
++        const std::string fault = get(params, "fault_kind");
++        const unsigned nTiles = getU(params, "n_tiles");
++        const unsigned hold = getU(params, "hold_cycles");
++        const std::string consumer = get(params, "consumer");
++        const std::string deviceIni = get(params, "device_ini");
++        const std::string systemIni = get(params, "system_ini");
++        const uint64_t delay = std::stoull(get(params, "transport_delay_cycles"));
++        const uint64_t interval = std::stoull(get(params, "service_interval_cycles"));
++        const uint64_t watchdog = std::stoull(get(params, "watchdog_cycles"));
++
++        auto memory = std::make_shared<MultiChannelMemorySystem>(
++            deviceIni, systemIni, ".", "phase1_g5", 256);
++        memory->setCPUClockSpeed(0);
++        Phase1Geometry geometry = Phase1Address::fromConfiguration();
++        Phase1Address codec(geometry);
++        Phase1Reports reports(codec, geometry.num_channels, geometry.num_banks, "bank", delay,
++                              interval, 64, true, true);
++        configureBanks(*memory, &reports, geometry.num_banks);
++        Phase1Runtime runtime(hold);
++
++        const unsigned dim = nTiles * 16u * 1u * 1u * 8u;
++        std::vector<BurstType> input0(dim), input1(dim), result(dim);
++        for (unsigned b = 0; b < dim; b++)
++            for (unsigned lane = 0; lane < 16; lane++)
++            {
++                const uint64_t i = static_cast<uint64_t>(b) * 16u + lane;
++                input0[b].fp16Data_[lane] =
++                    convertF2H(static_cast<float>((static_cast<long long>(i) + 0) % 17 - 8) / 8.0f);
++                input1[b].fp16Data_[lane] =
++                    convertF2H(static_cast<float>((3 * static_cast<long long>(i) + 0) % 13 - 6) /
++                               8.0f);
++            }
++        NumpyBurstType a;
++        a.bShape.push_back(dim);
++        a.bData = input0;
++        NumpyBurstType x;
++        x.bShape.push_back(dim);
++        x.bData = input1;
++        auto kernel = std::make_shared<PIMKernel>(memory, 1, 1);
++        OutputHandle handle = runtime.allocateOutput(static_cast<uint64_t>(dim) * 32u, 0);
++        runtime.beginProducing(handle, 0);
++        kernel->preloadNoReplacement(&a, 0, 0);
++        kernel->preloadNoReplacement(&x, 128, 0);
++        size_t preloadReports = 0;
++        LoopStats preload = runWithReports(*memory, reports, runtime, preloadReports, watchdog,
++                                           false);
++        if (preload.timeout)
++            throw std::runtime_error("input preload timed out");
++        uint64_t faultCycle = 0;
++        if (fault != "F0")
++        {
++            Bank& bank = (*memory->channels[0]->ranks)[0]->banks[0];
++            if (fault == "F1")
++                bank.injectRawDataBit(0, 0, 15);
++            else
++            {
++                bank.injectRawDataBit(0, 0, 0);
++                bank.injectRawDataBit(0, 0, 1);
++            }
++            faultCycle = memory->currentClockCycle;
++        }
++        kernel->executeEltwise(static_cast<int>(dim), pimBankType::ALL_BANK, KernelType::ADD, 0,
++                               256, 128);
++        size_t consumedReports = preloadReports;
++        LoopStats producer = runWithReports(*memory, reports, runtime, consumedReports, watchdog,
++                                            false);
++        if (producer.timeout)
++            throw std::runtime_error("producer timed out");
++        runtime.producerComplete(handle, memory->currentClockCycle);
++        const std::string stateAfterProducer = stateName(runtime, handle);
++
++        // Deliver any already-ready reports before the first publish decision.
++        reports.tick(memory->currentClockCycle);
++        while (consumedReports < reports.reports().size())
++        {
++            const Phase1PublicReport& report = reports.reports()[consumedReports++];
++            runtime.onReport(report, report.report_cycle);
++        }
++        runtime.tick(memory->currentClockCycle);
++        uint64_t holdCycles = 0;
++        const uint64_t holdLimit = hold + 2;
++        while (runtime.state(handle) == OutputState::READY_UNPUBLISHED &&
++               holdCycles < holdLimit)
++        {
++            memory->update();
++            reports.tick(memory->currentClockCycle);
++            while (consumedReports < reports.reports().size())
++            {
++                const Phase1PublicReport& report = reports.reports()[consumedReports++];
++                runtime.onReport(report, report.report_cycle);
++            }
++            runtime.tick(memory->currentClockCycle);
++            holdCycles++;
++        }
++        const std::string stateAfterHold = stateName(runtime, handle);
++
++        bool hostAdmitted = runtime.canConsume(handle, ConsumerType::HOST,
++                                                memory->currentClockCycle);
++        bool pimAdmitted = runtime.canAdmit(handle, ConsumerType::PIM,
++                                             memory->currentClockCycle);
++        bool hostBlocked = !hostAdmitted;
++        bool pimBlocked = !pimAdmitted;
++        bool bypassAssert = false;
++        if (hostBlocked || pimBlocked)
++        {
++            try
++            {
++                runtime.assertConsumerAllowed(handle, ConsumerType::HOST,
++                                              memory->currentClockCycle);
++            }
++            catch (const std::logic_error&)
++            {
++                bypassAssert = true;
++            }
++        }
++
++        std::ofstream output(join(outputDir, "output.bin"), std::ios::binary);
++        if (consumer == "HOST" && hostAdmitted)
++        {
++            kernel->readData(result.data(), dim, 256, 0);
++            LoopStats consumed = runWithReports(*memory, reports, runtime, consumedReports,
++                                                watchdog, true);
++            if (consumed.timeout)
++                throw std::runtime_error("host consumer timed out");
++            for (const BurstType& burst : result)
++                output.write(reinterpret_cast<const char*>(burst.u8Data_), sizeof(burst.u8Data_));
++            runtime.consume(handle, ConsumerType::HOST, memory->currentClockCycle);
++        }
++        else
++        {
++            output << "";
++        }
++        output.close();
++        reports.writeCsv(join(outputDir, "reports.csv"));
++        Phase1Trace events(join(outputDir, "events.csv"), false);
++        writeTruth(join(outputDir, "truth.csv"), fault, faultCycle, input0[0]);
++        writeMetrics(join(outputDir, "metrics.json"), fault, nTiles, hold, consumer,
++                     stateAfterProducer, stateAfterHold, runtime.isPublished(handle), hostAdmitted,
++                     pimAdmitted, hostBlocked, pimBlocked, bypassAssert, runtime.lateReports() > 0,
++                     runtime.publishCycle(), runtime.lockCycle(), producer.cycles, reports,
++                     producer.timeout);
++        (void)codec;
++    }
++    catch (const std::exception& error)
++    {
++        FAIL() << "G5 case failed: " << error.what();
++    }
++}
+diff --git a/src/tests/Phase1G6TestCases.cpp b/src/tests/Phase1G6TestCases.cpp
+new file mode 100644
+index 0000000..8f4bc63
+--- /dev/null
++++ b/src/tests/Phase1G6TestCases.cpp
+@@ -0,0 +1,428 @@
++#include <cstdlib>
++#include <fstream>
++#include <iomanip>
++#include <map>
++#include <sstream>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++#include "gtest/gtest.h"
++#include "tests/PIMKernel.h"
++#include "Phase1Address.h"
++#include "Phase1Driver.h"
++#include "Phase1Feeder.h"
++#include "Phase1Pause.h"
++#include "Phase1Reports.h"
++#include "Phase1Trace.h"
++
++using namespace DRAMSim;
++
++namespace
++{
++std::string trim(const std::string& input)
++{
++    const std::string ws = " \t\r\n";
++    const std::size_t first = input.find_first_not_of(ws);
++    if (first == std::string::npos)
++        return "";
++    const std::size_t last = input.find_last_not_of(ws);
++    return input.substr(first, last - first + 1);
++}
++
++std::map<std::string, std::string> readParams(const std::string& path)
++{
++    std::ifstream input(path);
++    if (!input)
++        throw std::runtime_error("cannot open G6 params: " + path);
++    std::map<std::string, std::string> values;
++    std::string line;
++    while (std::getline(input, line))
++    {
++        line = trim(line);
++        if (line.empty() || line[0] == ';' || line[0] == '#')
++            continue;
++        const std::size_t eq = line.find('=');
++        if (eq == std::string::npos)
++            throw std::runtime_error("malformed G6 param line");
++        values[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
++    }
++    return values;
++}
++
++std::string get(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    auto it = p.find(key);
++    if (it == p.end())
++        throw std::runtime_error("missing G6 param: " + key);
++    return it->second;
++}
++
++unsigned getU(const std::map<std::string, std::string>& p, const std::string& key)
++{
++    return static_cast<unsigned>(std::stoul(get(p, key)));
++}
++
++std::string join(const std::string& dir, const std::string& name)
++{
++    if (dir.empty())
++        return name;
++    return (dir.back() == '/') ? dir + name : dir + "/" + name;
++}
++
++void writeEmptyProtocol(const std::string& dir)
++{
++    std::ofstream reports(join(dir, "reports.csv"));
++    reports << "report_seq,report_cycle,error_class,region_type,region_id\n";
++    reports.close();
++    std::ofstream truth(join(dir, "truth.csv"));
++    truth << "record_type,detection_id,fault_id,fault_cycle,storage_key,codeword_index,"
++             "bit_positions,raw_before,raw_after,target_access_id,detect_cycle,decoder_status,"
++             "eligible_report_id,dropped\n";
++    truth.close();
++    Phase1Trace events(join(dir, "events.csv"), false);
++}
++
++uint64_t dataAccessCount(MultiChannelMemorySystem& memory, unsigned channel)
++{
++    uint64_t total = 0;
++    for (Rank* rank : *memory.channels[channel]->ranks)
++        for (Bank& bank : rank->banks)
++            total += bank.dataAccessCount();
++    return total;
++}
++
++uint64_t refreshCount(MultiChannelMemorySystem& memory, unsigned channel)
++{
++    uint64_t total = 0;
++    for (Rank* rank : *memory.channels[channel]->ranks)
++        total += rank->refreshCount;
++    return total;
++}
++
++struct LoopStats
++{
++    uint64_t cycles = 0;
++    bool timeout = false;
++};
++
++LoopStats runSyntheticPre(MultiChannelMemorySystem& memory, Phase1FeederMemory& feeder,
++                          Phase1PauseController& pause, unsigned cycles, uint64_t watchdog,
++                          bool nearCompletion)
++{
++    LoopStats stats;
++    for (unsigned i = 0; i < cycles && stats.cycles < watchdog; i++)
++    {
++        if (nearCompletion && feeder.pendingCount() <= 16)
++            break;
++        feeder.tick();
++        memory.update();
++        pause.tick(memory.currentClockCycle);
++        stats.cycles++;
++    }
++    return stats;
++}
++
++LoopStats drainToAck(MultiChannelMemorySystem& memory, Phase1PauseController& pause,
++                     uint64_t watchdog, bool tickOtherChannel, Phase1FeederMemory* feeder,
++                     unsigned otherChannel)
++{
++    LoopStats stats;
++    while (!pause.acked())
++    {
++        if (stats.cycles >= watchdog)
++        {
++            stats.timeout = true;
++            break;
++        }
++        if (tickOtherChannel && feeder != nullptr)
++            feeder->tickChannel(otherChannel);
++        memory.update();
++        pause.tick(memory.currentClockCycle);
++        stats.cycles++;
++        if (!pause.requested())
++            break;
++    }
++    return stats;
++}
++
++void writeMetrics(const std::string& path, const std::string& scenario, unsigned channels,
++                  unsigned feederLimit, unsigned handlerDelay, const std::string& reason,
++                  const Phase1PauseController& pause, uint64_t preCycles,
++                  uint64_t externalPending, uint64_t dataBefore, uint64_t dataAfter,
++                  uint64_t refreshBefore, uint64_t refreshAfter, uint64_t observationCycles,
++                  uint64_t clockBefore, uint64_t clockAfter, bool timeout,
++                  unsigned reportCount = 0, unsigned reportCycle = 0,
++                  uint64_t otherChannelDataBefore = 0, uint64_t otherChannelDataAfter = 0)
++{
++    std::ofstream out(path);
++    if (!out)
++        throw std::runtime_error("cannot open G6 metrics");
++    out << "{\n"
++        << "  \"scenario\": \"" << scenario << "\",\n"
++        << "  \"channels\": " << channels << ",\n"
++        << "  \"feeder_limit\": " << feederLimit << ",\n"
++        << "  \"handler_delay\": " << handlerDelay << ",\n"
++        << "  \"reason\": \"" << reason << "\",\n"
++        << "  \"requested\": " << (pause.requested() ? "true" : "false") << ",\n"
++        << "  \"acked\": " << (pause.acked() ? "true" : "false") << ",\n"
++        << "  \"request_cycle\": " << pause.requestCycle() << ",\n"
++        << "  \"ack_cycle\": " << pause.ackCycle() << ",\n"
++        << "  \"quiesce_cycles\": " << (pause.acked() ? pause.quiesceCycles() : 0) << ",\n"
++        << "  \"pre_cycles\": " << preCycles << ",\n"
++        << "  \"external_pending_frozen\": " << externalPending << ",\n"
++        << "  \"data_before_ack\": " << dataBefore << ",\n"
++        << "  \"data_after_observation\": " << dataAfter << ",\n"
++        << "  \"data_delta_after_ack\": " << static_cast<long long>(dataAfter - dataBefore) << ",\n"
++        << "  \"refresh_before\": " << refreshBefore << ",\n"
++        << "  \"refresh_after\": " << refreshAfter << ",\n"
++        << "  \"observation_cycles\": " << observationCycles << ",\n"
++        << "  \"clock_before\": " << clockBefore << ",\n"
++        << "  \"clock_after\": " << clockAfter << ",\n"
++        << "  \"clock_delta\": " << (clockAfter - clockBefore) << ",\n"
++        << "  \"report_count\": " << reportCount << ",\n"
++        << "  \"report_cycle\": " << reportCycle << ",\n"
++        << "  \"other_channel_data_before\": " << otherChannelDataBefore << ",\n"
++        << "  \"other_channel_data_after\": " << otherChannelDataAfter << ",\n"
++        << "  \"other_channel_data_delta\": "
++        << static_cast<long long>(otherChannelDataAfter - otherChannelDataBefore) << ",\n"
++        << "  \"timeout\": " << (timeout ? "true" : "false") << "\n"
++        << "}\n";
++}
++}  // namespace
++
++TEST(Phase1G6Fixture, RunCase)
++{
++    const char* configPath = std::getenv("PHASE1_CONFIG");
++    const char* outputPath = std::getenv("PHASE1_OUT");
++    if (configPath == nullptr)
++        GTEST_SKIP() << "PHASE1_CONFIG is not set";
++    ASSERT_NE(nullptr, outputPath);
++    const std::string outputDir(outputPath);
++    writeEmptyProtocol(outputDir);
++
++    try
++    {
++        const auto params = readParams(configPath);
++        const std::string scenario = get(params, "scenario");
++        const unsigned channels = getU(params, "channels");
++        const unsigned capacity = getU(params, "capacity_mb");
++        const unsigned feederLimit = getU(params, "feeder_limit");
++        const unsigned handlerDelay = getU(params, "handler_delay");
++        const unsigned observation = getU(params, "observation_cycles");
++        const uint64_t watchdog = std::stoull(get(params, "watchdog_cycles"));
++        const std::string deviceIni = get(params, "device_ini");
++        const std::string systemIni = get(params, "system_ini");
++
++        auto feeder = std::make_shared<Phase1FeederMemory>(deviceIni, systemIni, ".", "phase1_g6",
++                                                           capacity, feederLimit);
++        feeder->setCPUClockSpeed(0);
++        Phase1PauseController pause(*feeder, 0, handlerDelay);
++        Phase1Geometry geometry = Phase1Address::fromConfiguration();
++        ASSERT_EQ(channels, geometry.num_channels);
++
++        uint64_t reportCycle = 0;
++        unsigned reportCount = 0;
++        uint64_t preCycles = 0;
++        uint64_t dataBefore = 0;
++        uint64_t dataAfter = 0;
++        uint64_t refreshBefore = 0;
++        uint64_t refreshAfter = 0;
++        uint64_t clockBefore = 0;
++        uint64_t clockAfter = 0;
++        uint64_t otherBefore = 0;
++        uint64_t otherAfter = 0;
++        bool timeout = false;
++        std::string reason = "SYNTHETIC_CONTROL";
++
++        if (scenario == "SYNTHETIC_BEFORE" || scenario == "SYNTHETIC_QUEUE" ||
++            scenario == "SYNTHETIC_INFLIGHT" || scenario == "SYNTHETIC_NEAR")
++        {
++            ASSERT_EQ(1u, channels);
++            const unsigned nTiles = getU(params, "n_tiles");
++            const unsigned dim = nTiles * 16u * 1u * 1u * 8u;
++            std::vector<BurstType> input0(dim), input1(dim);
++            for (unsigned b = 0; b < dim; b++)
++                for (unsigned lane = 0; lane < 16; lane++)
++                {
++                    const uint64_t i = static_cast<uint64_t>(b) * 16u + lane;
++                    input0[b].fp16Data_[lane] = convertF2H(
++                        static_cast<float>((static_cast<long long>(i) + 0) % 17 - 8) / 8.0f);
++                    input1[b].fp16Data_[lane] = convertF2H(
++                        static_cast<float>((3 * static_cast<long long>(i) + 0) % 13 - 6) / 8.0f);
++                }
++            NumpyBurstType a;
++            a.bShape.push_back(dim);
++            a.bData = input0;
++            NumpyBurstType x;
++            x.bShape.push_back(dim);
++            x.bData = input1;
++            auto kernel = std::make_shared<PIMKernel>(feeder, 1, 1);
++            kernel->preloadNoReplacement(&a, 0, 0);
++            kernel->preloadNoReplacement(&x, 128, 0);
++            kernel->executeEltwise(static_cast<int>(dim), pimBankType::ALL_BANK, KernelType::ADD,
++                                   0, 256, 128);
++            unsigned pre = 0;
++            if (scenario == "SYNTHETIC_BEFORE")
++                pre = 0;
++            else if (scenario == "SYNTHETIC_QUEUE")
++                pre = 1;
++            else if (scenario == "SYNTHETIC_INFLIGHT")
++                pre = 100;
++            else
++                pre = 100000;
++            preCycles = runSyntheticPre(*feeder, *feeder, pause, pre, watchdog,
++                                        scenario == "SYNTHETIC_NEAR").cycles;
++            if (scenario == "SYNTHETIC_BEFORE") pause.request(0, "SYNTHETIC_CONTROL");
++            else pause.request(feeder->currentClockCycle, "SYNTHETIC_CONTROL");
++            LoopStats drain = drainToAck(*feeder, pause, watchdog, false, nullptr, 1);
++            timeout = drain.timeout;
++            preCycles += drain.cycles;
++            dataBefore = dataAccessCount(*feeder, 0);
++            refreshBefore = refreshCount(*feeder, 0);
++            clockBefore = feeder->currentClockCycle;
++            for (unsigned i = 0; i < observation; i++)
++            {
++                feeder->update();
++            }
++            dataAfter = dataAccessCount(*feeder, 0);
++            refreshAfter = refreshCount(*feeder, 0);
++            clockAfter = feeder->currentClockCycle;
++        }
++        else if (scenario == "ACTUAL_CE")
++        {
++            ASSERT_EQ(1u, channels);
++            Phase1Address reportCodec(geometry);
++            Phase1Reports reports(reportCodec, geometry.num_channels, geometry.num_banks,
++                                  "bank", 0, 1, 64, true, true);
++            for (MemorySystem* channel : feeder->channels)
++                for (Rank* rank : *channel->ranks)
++                    for (Bank& bank : rank->banks)
++                        bank.setPhase1(Phase1Profile::LOCAL_VISIBLE, &reports);
++
++            const unsigned dim = 1u * 16u * 1u * 1u * 8u;
++            std::vector<BurstType> input0(dim), input1(dim);
++            for (unsigned b = 0; b < dim; b++)
++                for (unsigned lane = 0; lane < 16; lane++)
++                {
++                    const uint64_t i = static_cast<uint64_t>(b) * 16u + lane;
++                    input0[b].fp16Data_[lane] = convertF2H(
++                        static_cast<float>((static_cast<long long>(i) + 0) % 17 - 8) / 8.0f);
++                    input1[b].fp16Data_[lane] = convertF2H(
++                        static_cast<float>((3 * static_cast<long long>(i) + 0) % 13 - 6) / 8.0f);
++                }
++            NumpyBurstType a;
++            a.bShape.push_back(dim);
++            a.bData = input0;
++            NumpyBurstType x;
++            x.bShape.push_back(dim);
++            x.bData = input1;
++            auto kernel = std::make_shared<PIMKernel>(feeder, 1, 1);
++            kernel->preloadNoReplacement(&a, 0, 0);
++            kernel->preloadNoReplacement(&x, 128, 0);
++            size_t consumedReports = 0;
++            while (feeder->pendingCount() > 0 || !Phase1Driver::directIdle(*feeder))
++            {
++                feeder->tick();
++                feeder->update();
++                reports.tick(feeder->currentClockCycle);
++                timeout = feeder->currentClockCycle > watchdog;
++                if (timeout) break;
++            }
++            if (!timeout)
++            {
++                (*feeder->channels[0]->ranks)[0]->banks[0].injectRawDataBit(0, 0, 15);
++                kernel->executeEltwise(static_cast<int>(dim), pimBankType::ALL_BANK,
++                                       KernelType::ADD, 0, 256, 128);
++                while (!pause.acked() &&
++                       (feeder->pendingCount() > 0 || !Phase1Driver::directIdle(*feeder) ||
++                        reports.pendingCount() > 0))
++                {
++                    if (feeder->currentClockCycle > watchdog)
++                    {
++                        timeout = true;
++                        break;
++                    }
++                    feeder->tick();
++                    feeder->update();
++                    reports.tick(feeder->currentClockCycle);
++                    while (consumedReports < reports.reports().size())
++                    {
++                        const Phase1PublicReport& report = reports.reports()[consumedReports++];
++                        if (reportCycle == 0) reportCycle = report.report_cycle;
++                        pause.notifyReport(report.report_cycle);
++                        reportCount++;
++                    }
++                    pause.tick(feeder->currentClockCycle);
++                    if (pause.acked()) break;
++                }
++                if (!pause.requested()) pause.request(feeder->currentClockCycle, "REPORT_TRIGGERED");
++                reason = "REPORT_TRIGGERED";
++                LoopStats drain = drainToAck(*feeder, pause, watchdog, false, nullptr, 1);
++                timeout = timeout || drain.timeout;
++                reports.writeCsv(join(outputDir, "reports.csv"));
++            }
++            dataBefore = dataAccessCount(*feeder, 0);
++            refreshBefore = refreshCount(*feeder, 0);
++            clockBefore = feeder->currentClockCycle;
++            for (unsigned i = 0; i < observation; i++) feeder->update();
++            dataAfter = dataAccessCount(*feeder, 0);
++            refreshAfter = refreshCount(*feeder, 0);
++            clockAfter = feeder->currentClockCycle;
++        }
++        else if (scenario == "TWO_CHANNEL")
++        {
++            ASSERT_EQ(2u, channels);
++            Phase1Address codec(geometry);
++            BurstType payload;
++            for (unsigned lane = 0; lane < 16; lane++)
++                payload.fp16Data_[lane] = convertF2H(static_cast<float>(lane + 1) / 8.0f);
++            for (unsigned ch = 0; ch < 2; ch++)
++                for (unsigned row = 0; row < 64; row++)
++                {
++                    Phase1AddrTuple tuple;
++                    tuple.channel = ch;
++                    tuple.rank = 0;
++                    tuple.bank = 0;
++                    tuple.row = row;
++                    tuple.burst_column = 0;
++                    feeder->addTransaction(true, codec.encode(tuple), &payload);
++                }
++            for (unsigned i = 0; i < 20; i++)
++            {
++                feeder->tickChannel(i % 2);
++                feeder->update();
++            }
++            pause.request(feeder->currentClockCycle, "SYNTHETIC_CONTROL");
++            LoopStats drain = drainToAck(*feeder, pause, watchdog, true, feeder.get(), 1);
++            timeout = drain.timeout;
++            preCycles = 20 + drain.cycles;
++            dataBefore = dataAccessCount(*feeder, 0);
++            otherBefore = dataAccessCount(*feeder, 1);
++            refreshBefore = refreshCount(*feeder, 0);
++            clockBefore = feeder->currentClockCycle;
++            for (unsigned i = 0; i < observation; i++)
++            {
++                feeder->tickChannel(1);
++                feeder->update();
++            }
++            dataAfter = dataAccessCount(*feeder, 0);
++            otherAfter = dataAccessCount(*feeder, 1);
++            refreshAfter = refreshCount(*feeder, 0);
++            clockAfter = feeder->currentClockCycle;
++        }
++        else
++        {
++            FAIL() << "unknown G6 scenario";
++        }
++
++        writeMetrics(join(outputDir, "metrics.json"), scenario, channels, feederLimit, handlerDelay,
++                     reason, pause, preCycles, feeder->pendingCount(), dataBefore, dataAfter,
++                     refreshBefore, refreshAfter, observation, clockBefore, clockAfter, timeout,
++                     reportCount, reportCycle, otherBefore, otherAfter);
++    }
++    catch (const std::exception& error)
++    {
++        FAIL() << "G6 case failed: " << error.what();
++    }
++}
+diff --git a/src/tests/Phase1TestCases.cpp b/src/tests/Phase1TestCases.cpp
+new file mode 100644
+index 0000000..09e0656
+--- /dev/null
++++ b/src/tests/Phase1TestCases.cpp
+@@ -0,0 +1,455 @@
++#include <sys/stat.h>
++
++#include <algorithm>
++#include <cstdint>
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <iostream>
++#include <memory>
++#include <set>
++#include <sstream>
++#include <stdexcept>
++#include <string>
++#include <vector>
++
++#include "gtest/gtest.h"
++#include "tests/PIMKernel.h"
++#include "Phase1Address.h"
++#include "Phase1Driver.h"
++#include "Phase1Feeder.h"
++#include "Phase1Trace.h"
++
++using namespace DRAMSim;
++
++namespace
++{
++std::string envOrEmpty(const char* name)
++{
++    const char* value = std::getenv(name);
++    return value == nullptr ? "" : std::string(value);
++}
++
++void ensureDirectory(const std::string& path)
++{
++    if (path.empty())
++        throw std::runtime_error("PHASE1_OUT is empty");
++    struct stat info;
++    if (stat(path.c_str(), &info) == 0)
++    {
++        if (!S_ISDIR(info.st_mode))
++            throw std::runtime_error("PHASE1_OUT is not a directory: " + path);
++        return;
++    }
++    if (mkdir(path.c_str(), 0755) != 0)
++        throw std::runtime_error("cannot create PHASE1_OUT: " + path);
++}
++
++std::string joinPath(const std::string& directory, const std::string& name)
++{
++    if (directory.empty())
++        return name;
++    if (directory.back() == '/')
++        return directory + name;
++    return directory + "/" + name;
++}
++
++void writeRawBursts(const std::string& path, const std::vector<BurstType>& bursts)
++{
++    std::ofstream output(path, std::ios::binary);
++    if (!output)
++        throw std::runtime_error("cannot open output: " + path);
++    for (const BurstType& burst : bursts)
++        output.write(reinterpret_cast<const char*>(burst.u8Data_), sizeof(burst.u8Data_));
++    if (!output)
++        throw std::runtime_error("failed writing output: " + path);
++}
++
++void writeTiming(const std::string& path, const Phase1RunConfig& config,
++                 const Phase1RunStats& stats, unsigned dimBursts, unsigned elements,
++                 unsigned burstBytes, const std::string& outputPath)
++{
++    std::ofstream output(path);
++    if (!output)
++        throw std::runtime_error("cannot open timing output: " + path);
++    output << "{\n"
++           << "  \"experiment\": \"" << config.experiment << "\",\n"
++           << "  \"workload\": \"" << config.workload << "\",\n"
++           << "  \"mode\": \"" << config.mode << "\",\n"
++           << "  \"trace_mode\": \"" << config.trace_mode << "\",\n"
++           << "  \"channels\": " << config.channels << ",\n"
++           << "  \"ranks\": " << config.ranks << ",\n"
++           << "  \"capacity_mb\": " << config.capacity_mb << ",\n"
++           << "  \"n_tiles\": " << config.n_tiles << ",\n"
++           << "  \"seed\": " << config.seed << ",\n"
++           << "  \"dim_bursts\": " << dimBursts << ",\n"
++           << "  \"elements\": " << elements << ",\n"
++           << "  \"burst_bytes\": " << burstBytes << ",\n"
++           << "  \"cycles\": " << stats.cycles << ",\n"
++           << "  \"updates\": " << stats.updates << ",\n"
++           << "  \"timeout\": " << (stats.timeout ? "true" : "false") << ",\n"
++           << "  \"feeder_used\": " << (stats.feeder_used ? "true" : "false") << ",\n"
++           << "  \"pending_at_end\": " << stats.pending_at_end << ",\n"
++           << "  \"outstanding_at_end\": " << stats.outstanding_at_end << ",\n"
++           << "  \"max_external_pending\": " << stats.max_external_pending << ",\n"
++           << "  \"max_accepted_outstanding\": " << stats.max_accepted_outstanding << ",\n"
++           << "  \"controller_rejections\": " << stats.controller_rejections << ",\n"
++           << "  \"barriers_retired\": " << stats.barriers_retired << ",\n"
++           << "  \"output\": \"" << outputPath << "\"\n"
++           << "}\n";
++}
++
++Phase1Geometry requireGeometry(MultiChannelMemorySystem& memory, const Phase1RunConfig& config)
++{
++    Phase1Geometry geometry = Phase1Address::fromConfiguration();
++    if (!geometry.valid())
++        throw std::runtime_error("invalid upstream memory geometry");
++    EXPECT_EQ(geometry.num_channels, config.channels);
++    EXPECT_EQ(geometry.num_ranks, config.ranks);
++    EXPECT_EQ(geometry.num_banks, 16u);
++    EXPECT_EQ(geometry.num_bank_groups, 4u);
++    EXPECT_EQ(geometry.num_rows, 16384u);
++    EXPECT_EQ(geometry.num_cols, 128u);
++    EXPECT_EQ(geometry.burst_length, 4u);
++    EXPECT_EQ(geometry.jedec_data_bus_bits, 64u);
++    EXPECT_EQ(geometry.burst_bytes(), 32u);
++    EXPECT_EQ(memory.channels.size(), config.channels);
++    return geometry;
++}
++
++void runAddressCheck(const Phase1RunConfig& config, const std::string& outputDirectory)
++{
++    auto memory = std::make_shared<MultiChannelMemorySystem>(
++        config.device_ini, config.system_ini, ".", "phase1_address", config.capacity_mb);
++    memory->setCPUClockSpeed(0);
++    Phase1Geometry geometry = requireGeometry(*memory, config);
++    Phase1Address codec(geometry);
++
++    const std::vector<unsigned> banks = {0u, 3u, geometry.num_banks - 1u};
++    const std::vector<unsigned> rows = {0u, 1u, geometry.num_rows / 2u, geometry.num_rows - 1u};
++    const std::vector<unsigned> columns = {0u, 1u, geometry.burst_columns() / 2u,
++                                           geometry.burst_columns() - 1u};
++
++    std::ofstream csv(joinPath(outputDirectory, "address_mapping.csv"));
++    if (!csv)
++        throw std::runtime_error("cannot write address_mapping.csv");
++    csv << "channel,bank,row,burst_column,address,decoded_channel,decoded_rank,"
++           "decoded_bank,decoded_row,decoded_burst_column,roundtrip_ok,upstream_decoder_ok,"
++           "unique_address\n";
++
++    std::set<uint64_t> addresses;
++    unsigned roundtripPass = 0;
++    unsigned upstreamPass = 0;
++    unsigned uniqueCount = 0;
++    unsigned total = 0;
++    for (unsigned channel = 0; channel < geometry.num_channels; channel++)
++    {
++        for (unsigned bank : banks)
++        {
++            for (unsigned row : rows)
++            {
++                for (unsigned column : columns)
++                {
++                    Phase1AddrTuple tuple;
++                    tuple.channel = channel;
++                    tuple.rank = 0;
++                    tuple.bank = bank;
++                    tuple.row = row;
++                    tuple.burst_column = column;
++                    const uint64_t address = codec.encode(tuple);
++                    const Phase1AddrTuple decoded = codec.decode(address);
++                    const bool roundtrip = (decoded == tuple);
++                    const bool unique = addresses.insert(address).second;
++                    if (!unique)
++                    {
++                        ADD_FAILURE() << "address collision at " << phase1AddrToString(tuple)
++                                      << " address=0x" << std::hex << address << std::dec;
++                    }
++
++                    unsigned upstreamChannel = 0, upstreamRank = 0, upstreamBank = 0,
++                             upstreamRow = 0, upstreamColumn = 0;
++                    memory->addrMapping->addressMapping(address, upstreamChannel, upstreamRank,
++                                                        upstreamBank, upstreamRow, upstreamColumn);
++                    const bool upstream =
++                        upstreamChannel == tuple.channel && upstreamRank == tuple.rank &&
++                        upstreamBank == tuple.bank && upstreamRow == tuple.row &&
++                        upstreamColumn == tuple.burst_column;
++                    const bool aligned = (address % geometry.burst_bytes()) == 0;
++                    const bool inRange = address <= codec.addressMask();
++                    EXPECT_TRUE(roundtrip);
++                    EXPECT_TRUE(upstream);
++                    EXPECT_TRUE(aligned);
++                    EXPECT_TRUE(inRange);
++                    if (roundtrip)
++                        roundtripPass++;
++                    if (upstream)
++                        upstreamPass++;
++                    if (unique)
++                        uniqueCount++;
++                    total++;
++                    csv << channel << "," << bank << "," << row << "," << column << ","
++                        << address << "," << decoded.channel << "," << decoded.rank << ","
++                        << decoded.bank << "," << decoded.row << "," << decoded.burst_column << ","
++                        << (roundtrip ? 1 : 0) << "," << (upstream ? 1 : 0) << ","
++                        << (unique ? 1 : 0) << "\n";
++                }
++            }
++        }
++    }
++
++    const bool allPass = total == roundtripPass && total == upstreamPass && total == uniqueCount;
++    std::ofstream summary(joinPath(outputDirectory, "address_mapping.json"));
++    if (!summary)
++        throw std::runtime_error("cannot write address_mapping.json");
++    summary << "{\n"
++            << "  \"channels\": " << config.channels << ",\n"
++            << "  \"capacity_mb\": " << config.capacity_mb << ",\n"
++            << "  \"banks_checked\": [0, 3, " << (geometry.num_banks - 1) << "],\n"
++            << "  \"rows_checked\": [0, 1, " << (geometry.num_rows / 2) << ", "
++            << (geometry.num_rows - 1) << "],\n"
++            << "  \"burst_columns_checked\": [0, 1, " << (geometry.burst_columns() / 2) << ", "
++            << (geometry.burst_columns() - 1) << "],\n"
++            << "  \"burst_bytes\": " << geometry.burst_bytes() << ",\n"
++            << "  \"address_bits\": " << (codec.addressMask() == 0 ? 0 : 64 - __builtin_clzll(codec.addressMask())) << ",\n"
++            << "  \"tuples\": " << total << ",\n"
++            << "  \"unique_addresses\": " << uniqueCount << ",\n"
++            << "  \"roundtrip_pass\": " << roundtripPass << ",\n"
++            << "  \"upstream_decoder_pass\": " << upstreamPass << ",\n"
++            << "  \"all_pass\": " << (allPass ? "true" : "false") << "\n"
++            << "}\n";
++    EXPECT_TRUE(allPass);
++}
++
++void runW0(const Phase1RunConfig& config, const std::string& outputDirectory)
++{
++    std::shared_ptr<MultiChannelMemorySystem> memory;
++    std::shared_ptr<Phase1FeederMemory> feeder;
++    if (config.mode == "feeder")
++    {
++        feeder = std::make_shared<Phase1FeederMemory>(
++            config.device_ini, config.system_ini, ".", "phase1_w0", config.capacity_mb,
++            config.feeder_outstanding_limit);
++        memory = feeder;
++    }
++    else
++    {
++        memory = std::make_shared<MultiChannelMemorySystem>(
++            config.device_ini, config.system_ini, ".", "phase1_w0", config.capacity_mb);
++    }
++    memory->setCPUClockSpeed(0);
++    Phase1Geometry geometry = requireGeometry(*memory, config);
++    Phase1Address codec(geometry);
++    Phase1AddrTuple tuple;
++    tuple.channel = 0;
++    tuple.rank = 0;
++    tuple.bank = 0;
++    tuple.row = 0;
++    tuple.burst_column = 0;
++    const uint64_t address = codec.encode(tuple);
++
++    BurstType writeBurst;
++    BurstType readBurst;
++    for (unsigned lane = 0; lane < 16; lane++)
++        writeBurst.fp16Data_[lane] = convertF2H(static_cast<float>(lane + 1) / 8.0f);
++
++    if (config.mode == "feeder")
++    {
++        EXPECT_TRUE(feeder->addTransaction(true, address, &writeBurst));
++        EXPECT_TRUE(feeder->addBarrier(0));
++        EXPECT_TRUE(feeder->addTransaction(false, address, &readBurst));
++        EXPECT_TRUE(feeder->addBarrier(0));
++    }
++    else
++    {
++        EXPECT_TRUE(memory->addTransaction(true, address, &writeBurst));
++        EXPECT_TRUE(memory->addBarrier(0));
++        EXPECT_TRUE(memory->addTransaction(false, address, &readBurst));
++        EXPECT_TRUE(memory->addBarrier(0));
++    }
++
++    Phase1RunStats stats = (config.mode == "feeder")
++                                ? Phase1Driver::runFeeder(*feeder, config.watchdog_cycles)
++                                : Phase1Driver::runDirect(*memory, config.watchdog_cycles);
++    EXPECT_FALSE(stats.timeout);
++    EXPECT_EQ(0, std::memcmp(writeBurst.u8Data_, readBurst.u8Data_, sizeof(writeBurst.u8Data_)));
++
++    std::vector<BurstType> output{readBurst};
++    const std::string outputPath = joinPath(outputDirectory, "output.bin");
++    writeRawBursts(outputPath, output);
++    writeTiming(joinPath(outputDirectory, "timing.json"), config, stats, 1u, 16u,
++                geometry.burst_bytes(), outputPath);
++}
++
++void fillEltwiseInputs(unsigned dimBursts, unsigned seed, std::vector<BurstType>& input0,
++                       std::vector<BurstType>& input1)
++{
++    input0.assign(dimBursts, BurstType());
++    input1.assign(dimBursts, BurstType());
++    const uint64_t elements = static_cast<uint64_t>(dimBursts) * 16u;
++    for (uint64_t i = 0; i < elements; i++)
++    {
++        const unsigned burst = static_cast<unsigned>(i / 16u);
++        const unsigned lane = static_cast<unsigned>(i % 16u);
++        const float a = static_cast<float>((static_cast<long long>(i) + seed) % 17 - 8) / 8.0f;
++        const float x =
++            static_cast<float>((3 * static_cast<long long>(i) + seed) % 13 - 6) / 8.0f;
++        input0[burst].fp16Data_[lane] = convertF2H(a);
++        input1[burst].fp16Data_[lane] = convertF2H(x);
++    }
++}
++
++void runW1(const Phase1RunConfig& config, const std::string& outputDirectory)
++{
++    std::shared_ptr<MultiChannelMemorySystem> memory;
++    std::shared_ptr<Phase1FeederMemory> feeder;
++    if (config.mode == "feeder")
++    {
++        feeder = std::make_shared<Phase1FeederMemory>(
++            config.device_ini, config.system_ini, ".", "phase1_w1", config.capacity_mb,
++            config.feeder_outstanding_limit);
++        memory = feeder;
++    }
++    else
++    {
++        memory = std::make_shared<MultiChannelMemorySystem>(
++            config.device_ini, config.system_ini, ".", "phase1_w1", config.capacity_mb);
++    }
++    memory->setCPUClockSpeed(0);
++    Phase1Geometry geometry = requireGeometry(*memory, config);
++    Phase1Trace trace(joinPath(outputDirectory, "events.csv"), config.trace_mode == "ext_on");
++    if (feeder)
++        feeder->setTrace(&trace);
++
++    const unsigned tileDivisor =
++        geometry.num_banks * config.channels * config.ranks * 8u;  // 8 GRF bursts
++    ASSERT_EQ(0u, tileDivisor % (geometry.num_banks * config.channels * config.ranks));
++    const unsigned dimBursts = config.n_tiles * tileDivisor;
++    const uint64_t elements = static_cast<uint64_t>(dimBursts) * 16u;
++    ASSERT_EQ(0u, dimBursts % tileDivisor);
++    ASSERT_EQ(config.n_tiles, dimBursts / tileDivisor);
++
++    std::vector<BurstType> input0;
++    std::vector<BurstType> input1;
++    fillEltwiseInputs(dimBursts, config.seed, input0, input1);
++    std::vector<BurstType> result(dimBursts);
++
++    NumpyBurstType a;
++    a.bShape.push_back(dimBursts);
++    a.bData = input0;
++    NumpyBurstType x;
++    x.bShape.push_back(dimBursts);
++    x.bData = input1;
++
++    auto kernel = std::make_shared<PIMKernel>(memory, config.channels, config.ranks);
++    kernel->preloadNoReplacement(&a, 0, 0);
++    kernel->preloadNoReplacement(&x, 128, 0);
++    kernel->executeEltwise(static_cast<int>(dimBursts), pimBankType::ALL_BANK, KernelType::ADD,
++                           0, 256, 128);
++    kernel->readData(result.data(), dimBursts, 256, 0);
++
++    trace.event(memory->currentClockCycle, "START", "RUN_START", "1", "1", "", -1, -1, -1, -1,
++                -1, "", -1, "started");
++    Phase1RunStats stats = (config.mode == "feeder")
++                                ? Phase1Driver::runFeeder(*feeder, config.watchdog_cycles)
++                                : Phase1Driver::runDirect(*memory, config.watchdog_cycles);
++    trace.event(memory->currentClockCycle, "FINALIZE", "RUN_END", "1", "1", "", -1, -1, -1, -1,
++                -1, "", -1, stats.timeout ? "timeout" : "finished");
++    EXPECT_FALSE(stats.timeout);
++
++    const std::string outputPath = joinPath(outputDirectory, "output.bin");
++    writeRawBursts(outputPath, result);
++    writeRawBursts(joinPath(outputDirectory, "input_a.bin"), input0);
++    writeRawBursts(joinPath(outputDirectory, "input_x.bin"), input1);
++    writeTiming(joinPath(outputDirectory, "timing.json"), config, stats, dimBursts,
++                static_cast<unsigned>(elements), geometry.burst_bytes(), outputPath);
++}
++
++}  // namespace
++
++TEST(Phase1Contract, FeederRetainsOnControllerRejection)
++{
++    const std::string systemIni =
++        envOrEmpty("PHASE1_SYSTEM_INI").empty() ? "../configs/phase1_system_1ch.ini"
++                                                : envOrEmpty("PHASE1_SYSTEM_INI");
++    if (!std::ifstream(systemIni).good())
++    {
++        GTEST_SKIP() << "Phase1 system ini not available: " << systemIni;
++    }
++
++    try
++    {
++        auto feeder = std::make_shared<Phase1FeederMemory>(
++            "ini/HBM2_samsung_2M_16B_x64.ini", systemIni, ".", "phase1_contract", 256, 8);
++        feeder->setCPUClockSpeed(0);
++        BurstType payload;
++        for (unsigned lane = 0; lane < 16; lane++)
++            payload.fp16Data_[lane] = convertF2H(static_cast<float>(lane + 1) / 8.0f);
++
++        Phase1Geometry geometry = Phase1Address::fromConfiguration();
++        Phase1Address codec(geometry);
++        Phase1AddrTuple tuple;
++        tuple.channel = 0;
++        tuple.rank = 0;
++        tuple.bank = 0;
++        tuple.row = 0;
++        tuple.burst_column = 0;
++        const uint64_t address = codec.encode(tuple);
++
++        // Fill the controller's bounded transaction queue directly through the
++        // upstream base API.  This is a test-only admission-pressure setup; it
++        // does not bypass the storage path or inspect truth.
++        unsigned prefill = 0;
++        for (; prefill < getConfigParam(UINT, "TRANS_QUEUE_DEPTH"); prefill++)
++        {
++            if (!feeder->MultiChannelMemorySystem::addTransaction(true, address, &payload))
++                break;
++        }
++        ASSERT_EQ(getConfigParam(UINT, "TRANS_QUEUE_DEPTH"), prefill);
++
++        BurstType received;
++        EXPECT_TRUE(feeder->addTransaction(false, address, &received));
++        EXPECT_FALSE(feeder->tick());  // controller full: must retain descriptor
++        EXPECT_GE(feeder->controllerRejections(), 1u);
++        EXPECT_EQ(1u, feeder->pendingCount());
++
++        Phase1RunStats stats = Phase1Driver::runFeeder(*feeder, 100000);
++        EXPECT_FALSE(stats.timeout);
++        EXPECT_EQ(0u, feeder->pendingCount());
++        EXPECT_EQ(0u, feeder->outstandingCount());
++        EXPECT_GE(feeder->controllerRejections(), 1u);
++        EXPECT_EQ(0, std::memcmp(payload.u8Data_, received.u8Data_, sizeof(payload.u8Data_)));
++    }
++    catch (const std::exception& error)
++    {
++        FAIL() << "feeder admission test failed: " << error.what();
++    }
++}
++
++TEST(Phase1Fixture, RunCase)
++{
++    const std::string configPath = envOrEmpty("PHASE1_CONFIG");
++    const std::string outputDirectory = envOrEmpty("PHASE1_OUT");
++    if (configPath.empty())
++    {
++        GTEST_SKIP() << "PHASE1_CONFIG is not set";
++    }
++    ASSERT_FALSE(outputDirectory.empty()) << "PHASE1_OUT is not set";
++
++    try
++    {
++        ensureDirectory(outputDirectory);
++        Phase1RunConfig config = loadPhase1Config(configPath);
++        if (config.workload == "ADDRESS")
++            runAddressCheck(config, outputDirectory);
++        else if (config.workload == "W0")
++            runW0(config, outputDirectory);
++        else if (config.workload == "W1")
++            runW1(config, outputDirectory);
++        else
++            FAIL() << "unsupported workload " << config.workload;
++    }
++    catch (const std::exception& error)
++    {
++        FAIL() << "Phase1 case failed: " << error.what();
++    }
++}

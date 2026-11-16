@@ -1,0 +1,21 @@
+{
+  "run_id": "22eefbc04b5162de",
+  "group": "P1-E",
+  "group_key": "P1E",
+  "fixture": "Phase1G7NegativeFixture.RunCase",
+  "params": {
+    "experiment": "G7",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "case": "VERSION_MISMATCH",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/22eefbc04b5162de"
+  },
+  "case": {
+    "case_id": "P1E_VERSION_MISMATCH",
+    "kind": "status_negative",
+    "status": "VERSION_MISMATCH",
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/22eefbc04b5162de"
+  },
+  "expected_negative": true,
+  "expected_status": "VERSION_MISMATCH"
+}

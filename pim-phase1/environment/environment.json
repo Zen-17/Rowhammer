@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-11-15T12:27:58+00:00",
+  "project_root": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1",
+  "upstream": {
+    "url": "https://github.com/SAITPublic/PIMSimulator.git",
+    "commit": "3703d1f19c8f027360cc33a3243eb271e3bb6898",
+    "tree": "7ac34faf86579aca00f5b357c61b5550d1dff7e7",
+    "commit_date": "2024-07-01T20:48:44+09:00",
+    "commit_subject": "Update readme",
+    "shallow_clone": "true",
+    "worktree_clean": true,
+    "git_status_porcelain": ""
+  },
+  "host": {
+    "os_pretty": "Ubuntu 22.04.5 LTS",
+    "os_id": "ubuntu",
+    "os_version": "22.04",
+    "kernel": "5.4.0-144-generic",
+    "arch": "x86_64",
+    "cpu_model": "Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz",
+    "logical_cpus": 112,
+    "memory_bytes": 540677586944,
+    "disk_total_bytes": 1131473793011712,
+    "disk_free_bytes": 958536080220160,
+    "python_executable": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/.venv/bin/python",
+    "python_version": "3.10.12 (main, Aug 31 2026, 10:18:17) [GCC 11.4.0]"
+  },
+  "toolchain": {
+    "gcc": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+    "gxx": "g++ (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+    "git": "git version 2.34.1",
+    "scons": "SCons by Steven Knight et al.:\n\tSCons: v4.0.1.c289977f8b34786ab6c334311e232886da7e8df1, 2020-07-17 01:50:03, by bdbaddog on ProDog2020\n\tSCons path: ['/usr/lib/python3/dist-packages/SCons']\nCopyright (c) 2001 - 2020 The SCons Foundation",
+    "libgtest_dev_version": "1.11.0-3"
+  },
+  "build": {
+    "command": "scons NO_STORAGE=0 NO_LIBRARY=1",
+    "working_directory": "simulator",
+    "cxxflags": "-g -O2 -std=c++14 -Wall -Wno-reorder -Wno-sign-compare",
+    "linkflags": "-g -O2 -std=c++14 -Wall -Wno-reorder -Wno-sign-compare",
+    "no_storage_argument": 0,
+    "no_storage_define_present": false,
+    "storage_enabled": true,
+    "binary": {
+      "path": "simulator/sim",
+      "bytes": 13878728,
+      "sha256": "f596d0a0a8fe5ae0a7859f599aada5c924c8495a876bd7ce5a8a8674b4b12a5e"
+    }
+  },
+  "original_configs": [
+    {
+      "path": "ini/HBM2_samsung_2M_16B_x64.ini",
+      "bytes": 544,
+      "sha256": "a770f3d6e1347eef0396d438859e84b7b32001dab5513e662f9bb24e4e6a3ecd"
+    },
+    {
+      "path": "system_hbm.ini",
+      "bytes": 1793,
+      "sha256": "a22b185f32341a1082607ce89ad67c3b38f90f7e5ce26ba6ec12f972236e7170"
+    },
+    {
+      "path": "system_hbm_1ch.ini",
+      "bytes": 1822,
+      "sha256": "06554c0b1fe72c491ee617ccc05147d052b0acd2a66d4cba669161970c0720e2"
+    },
+    {
+      "path": "system_hbm_64ch.ini",
+      "bytes": 1807,
+      "sha256": "d969b82501925fb5c26297feefb22a1aaa5986b87edefeee35ef8068aaff79be"
+    }
+  ],
+  "python_packages": [
+    "attrs==26.1.0",
+    "contourpy==1.3.2",
+    "cycler==0.12.1",
+    "exceptiongroup==1.3.1",
+    "fonttools==4.65.0",
+    "iniconfig==2.3.1",
+    "jsonschema==4.26.0",
+    "jsonschema-specifications==2025.9.1",
+    "kiwisolver==1.5.1",
+    "matplotlib==3.10.9",
+    "numpy==2.2.6",
+    "packaging==26.3",
+    "pandas==2.3.3",
+    "pillow==12.3.0",
+    "pluggy==1.7.0",
+    "Pygments==2.21.0",
+    "pyparsing==3.3.3",
+    "pytest==9.2.0",
+    "python-dateutil==3.0.0",
+    "pytz==2026.6",
+    "PyYAML==6.0.3",
+    "referencing==0.37.0",
+    "rpds-py==0.30.0",
+    "six==1.17.0",
+    "tomli==2.5.0",
+    "typing_extensions==4.16.0",
+    "tzdata==2026.6"
+  ],
+  "environment_hash": "9bd07d55353ada1ef0f6a2f96a41e816caaf806fc048f19f0477e557829af90e",
+  "environment_hash_inputs": {
+    "upstream_commit": "3703d1f19c8f027360cc33a3243eb271e3bb6898",
+    "os": "Ubuntu 22.04.5 LTS",
+    "kernel": "5.4.0-144-generic",
+    "arch": "x86_64",
+    "cpu_model": "Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz",
+    "logical_cpus": 112,
+    "memory_bytes": 540677586944,
+    "gcc": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+    "gxx": "g++ (Ubuntu 11.4.0-1ubuntu1~22.04.2) 11.4.0",
+    "scons": "SCons by Steven Knight et al.:\n\tSCons: v4.0.1.c289977f8b34786ab6c334311e232886da7e8df1, 2020-07-17 01:50:03, by bdbaddog on ProDog2020\n\tSCons path: ['/usr/lib/python3/dist-packages/SCons']\nCopyright (c) 2001 - 2020 The SCons Foundation",
+    "python": "Python 3.10.12",
+    "build_command": "scons NO_STORAGE=0 NO_LIBRARY=1",
+    "cxxflags": "-g -O2 -std=c++14 -Wall -Wno-reorder -Wno-sign-compare",
+    "storage_enabled": true
+  }
+}

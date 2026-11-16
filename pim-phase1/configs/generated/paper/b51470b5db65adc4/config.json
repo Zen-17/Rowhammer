@@ -1,0 +1,30 @@
+{
+  "run_id": "b51470b5db65adc4",
+  "group": "P1-F Cost",
+  "group_key": "P1F_COST",
+  "fixture": "Phase1G8CostFixture.RunCase",
+  "params": {
+    "experiment": "P1F_COST",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "n_tiles": "1",
+    "seed": "29",
+    "consumer": "HOST",
+    "policy": "LOCAL_VISIBLE_H0",
+    "hold_cycles": "0",
+    "t_ref_cycles": "804",
+    "watchdog_cycles": "400000",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b51470b5db65adc4"
+  },
+  "case": {
+    "case_id": "P1F_COST_nt1_host_s29_LOCAL_VISIBLE_H0",
+    "n_tiles": 1,
+    "seed": 29,
+    "consumer": "HOST",
+    "policy": "LOCAL_VISIBLE_H0",
+    "hold_cycles": 0,
+    "t_ref_cycles": 804,
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b51470b5db65adc4"
+  },
+  "expected_negative": false
+}

@@ -1,0 +1,43 @@
+{
+  "run_id": "b2b54829f19a02d3",
+  "group": "P1-C",
+  "group_key": "P1C",
+  "fixture": "Phase1G8P1CFixture.RunCase",
+  "params": {
+    "experiment": "P1C",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "profile": "HOST_ONLY",
+    "granularity": "bank",
+    "fault_kind": "F1",
+    "n_tiles": "1",
+    "seed": "1",
+    "consumer": "HOST",
+    "target_burst": "62",
+    "transport_delay_cycles": "0",
+    "hold_cycles": "731",
+    "t_ref_cycles": "731",
+    "handler_delay_cycles": "8",
+    "service_interval_cycles": "1",
+    "report_queue_capacity": "64",
+    "watchdog_cycles": "400000",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b2b54829f19a02d3"
+  },
+  "case": {
+    "case_id": "P1C_CTRL_HOST_ONLY_host_s1_h1.0",
+    "n_tiles": 1,
+    "seed": 1,
+    "consumer": "HOST",
+    "profile": "HOST_ONLY",
+    "target_burst": 62,
+    "target_segment": "middle",
+    "delay_ratio": 0.0,
+    "hold_ratio": 1.0,
+    "transport_delay_cycles": 0,
+    "hold_cycles": 731,
+    "t_ref_cycles": 731,
+    "control": true,
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/paper/b2b54829f19a02d3"
+  },
+  "expected_negative": false
+}
