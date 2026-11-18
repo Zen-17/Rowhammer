@@ -10,7 +10,7 @@
 
 \title{HBM-PIM Phase 1: ECC Reporting, Output Control, Pause and Recovery}
 \author{Phase 1 Experimental Framework}
-\date{2026-11-15}
+\date{2026-11-16}
 
 \begin{document}
 \maketitle
@@ -22,7 +22,9 @@ HBM-PIM ADD kernel. The study uses the fixed PIMSimulator commit
 \texttt{3703d1f19c8f027360cc33a3243eb271e3bb6898}. It is a model study: the
 ECC layout, control interface and notification path are explicit assumptions,
 not measurements of a commercial product. The paper matrix contains 2602 cases;
-2595 succeed, 7 are expected negatives, and none fail or time out.
+2595 succeed, 7 are expected negatives, and none fail or time out. A separate
+supplement adds 4650 constructed-escape and report-sequence cases; all 4650
+succeed, with no failure, timeout or missing case.
 \end{abstract}
 
 \section{Scope and platform}
@@ -34,6 +36,14 @@ research SECDED(72,64) model with four codewords per 32\,B burst. The runtime
 sees only the public fields \texttt{report\_seq}, \texttt{report\_cycle},
 \texttt{error\_class}, \texttt{region\_type} and \texttt{region\_id}; it does
 not read \texttt{truth.csv} or a reference output.
+
+The supplement asks two further questions. P1-G constructs ECC escapes
+(miscorrection F3M, silent F4S, and a CE witness plus silent F4S) and tests
+whether timely control withholds an actually corrupted output. P1-H compares
+multi-report sequences under bank, page and an ASSUMED codeword granularity,
+with and without an ASSUMED idealized scrub, to test what coarse public reports
+can distinguish. The supplement has an independent manifest with 4320 P1-G and
+330 P1-H cases (4650 total) and is not counted in the 2602 paper cases.
 
 \section{Method}
 For every W1 case, C++ and an independent Python/NumPy reference generate the
@@ -199,6 +209,142 @@ configuration. (b) Resident space components in KiB.}
 \label{fig:cost}
 \end{figure}
 
+\subsection{P1-G: does timely control stop a corrupted value?}
+P1-G uses constructed ECC escapes rather than a corrected single-bit CE. F3M
+flips data bits $\{0,1,4\}$: the decoder returns CORRECTED and reports a CE,
+but corrects data bit 10 and returns a wrong value. F4S flips
+$\{0,1,4,10\}$: the syndrome is zero, the decoder returns CLEAN, and there is
+no report. Both modes deliver exactly the same bad 64-bit value. F1W\_F4S adds
+a corrected CE witness in one burst and a silent F4S in another, in the same or
+a different bank. The evaluator runs only after the case, reads the held B
+storage for the corrupt burst, and never gives truth or the corrupt address to
+the runtime. PREVENTED requires an unpublished output, a fired runtime lock and
+a held B different from the fault-free B. MASKED means FP16 rounding made the
+final B/C byte-identical; it is excluded from the control-fraction denominator
+and reported separately.
+
+Table~\ref{tab:p1g} gives the n\_tiles=8 HOST panel of Fig.~\ref{fig:escape}.
+Across all 4320 P1-G cases, PREVENTED is 2166, CORRUPT\_CONSUMED is 1920 and
+MASKED is 234. F3M prevents at small D and/or large H and is consumed when the
+report is late; every unmasked F4S case is consumed because there is no report.
+The full size/consumer matrix is Fig.~\ref{fig:escape_config}.
+
+\begin{table}[t]
+\centering
+\caption{P1-G outcomes in the n\_tiles=8 HOST panel (270 cases per
+configuration).}
+\label{tab:p1g}
+\begin{tabular}{lrrrr}
+\toprule
+configuration & PREVENTED & CORRUPT\_CONSUMED & MASKED & total \\
+\midrule
+F3M & 172 & 80 & 18 & 270 \\
+F4S & 0 & 252 & 18 & 270 \\
+F1W\_F4S SAME\_BANK & 180 & 81 & 9 & 270 \\
+F1W\_F4S DIFF\_BANK & 180 & 81 & 9 & 270 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For F3M, 28 of the 36 Fig.~\ref{fig:control} cells have exactly the same
+fraction as TIMELY\_CONTROL; the other eight differ by at most 5.7 percentage
+points (3/9 in the n\_tiles=8 HOST panel). Fig.~\ref{fig:control} uses all 30
+seeds and classifies TIMELY\_CONTROL from the runtime, whereas P1-G removes
+MASKED seeds and additionally requires the held B to be corrupt. The grid
+pattern is consistent and the differences are not tuned away. F1W\_F4S
+SAME\_BANK and DIFF\_BANK have identical outcomes in 990/1080 matched cases;
+the 90 differences are all one side MASKED while the other propagates, never a
+case where both propagate and one is prevented while the other is consumed.
+DIFF\_BANK has \texttt{report\_covers\_corrupt\_bank=false} in 1080/1080
+cases, while SAME\_BANK is true in 1080/1080. The current runtime locks the
+whole kernel on the witness CE, so it does not rely on report-region coverage;
+a future region-selective recovery would miss the DIFF\_BANK damage.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig07_escape_efficacy.pdf}
+\caption{P1-G escape efficacy for n\_tiles=8 HOST. Color is
+CORRUPT\_CONSUMED/$n'$, with $n'=30-\mathrm{MASKED}$; cells show C/P counts
+and panel subtitles give $n'$ and MASKED. F3M and F4S deliver the same bad data;
+only F3M reports. Constructed patterns, not a Rowhammer probability model.}
+\label{fig:escape}
+\end{figure}
+
+\subsection{P1-H: what a sequence of coarse reports can distinguish}
+P1-H has 330 cases: 10 seeds over six scenarios, bank/page/ASSUMED-codeword
+granularity, and with/without ASSUMED idealized scrub. S1 is one persistent bit; S2 is two
+independent errors in different codewords of one burst; S3 is the same bank and
+a different row; S4 is two susceptible bits in one codeword (dangerous); S5 is
+a different bank; S6 repeats the same bit after scrub. Each round reads P, Q,
+R in the same order. The public signature is \texttt{error\_class:region\_id}
+ordered by \texttt{report\_seq}, excluding \texttt{report\_cycle}.
+
+Table~\ref{tab:p1h} lists the non-singleton 10/10 equivalence groups.
+Bank granularity cannot separate dangerous S4 from benign S2, S3 or S6; page
+granularity also groups S4 with S2/S5/S6; codeword granularity separates S2 and
+S3 from S4 but still cannot separate S4 from S6. Fig.~\ref{fig:ambiguity}
+visualizes the pair matrix.
+
+\begin{table}[t]
+\centering
+\caption{P1-H non-singleton groups with identical report signatures in 10/10
+seeds.}
+\label{tab:p1h}
+\begin{tabular}{llll}
+\toprule
+scrub & bank & page & codeword \\
+\midrule
+0 & S2$\equiv$S3 & S2$\equiv$S5 & none \\
+1 & S2$\equiv$S3$\equiv$S4$\equiv$S6 &
+    S2$\equiv$S4$\equiv$S5$\equiv$S6 & S4$\equiv$S6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The CoF-style rule (fire when one region receives at least two CEs) fires on
+S2/S3/S4/S6 at bank granularity, on S2/S4/S5/S6 at page granularity, and on
+S4/S6 at codeword granularity (all 10/10 seeds). It fires on S4 but also on
+benign scenarios, so it cannot identify S4 by itself. With scrub=0, S4 produces
+UE in 10/10 seeds at all three granularities, becoming distinguishable only
+after the error is uncorrectable; no other scenario produces UE.
+Table~\ref{tab:cof} summarizes the rule.
+
+\begin{table}[t]
+\centering
+\caption{CoF-style rule at scrub=1: scenarios firing in 10/10 seeds.}
+\label{tab:cof}
+\begin{tabular}{ll}
+\toprule
+granularity & firing scenarios \\
+\midrule
+bank & S2, S3, S4, S6 \\
+page & S2, S4, S5, S6 \\
+codeword & S4, S6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig08_report_ambiguity.pdf}
+\caption{P1-H report-sequence ambiguity. Rows are scrub off/on; columns are
+bank/page/codeword. Color is the fraction of 10 seeds with identical public
+report signatures; only non-diagonal pairs are shown, zero cells are blank,
+the diagonal is omitted, and hatched cells are S6 at scrub=0 (not run).
+S4* is the dangerous same-codeword case.}
+\label{fig:ambiguity}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figS2_escape_by_config.pdf}
+\caption{P1-G escape efficacy across n\_tiles and consumer. Rows are
+n\_tiles 1/8 by HOST/PIM; columns are F3M, F1W SAME\_BANK, F1W DIFF\_BANK and
+F4S. Color and cell text follow Fig.~\ref{fig:escape}; panel subtitles give
+$n'$ and MASKED.}
+\label{fig:escape_config}
+\end{figure}
+
 \section{Expected negatives and failure accounting}
 The G8 manifest has 2602 cases: 2595 SUCCESS, 7 EXPECTED\_NEGATIVE, 0 FAIL, 0
 TIMEOUT and 0 MISSING. The expected negatives are CHECKPOINT\_MISSING,
@@ -207,13 +353,23 @@ NO\_INPUT\_RESTORE and NO\_STATE\_RESET. The known upstream
 \texttt{PIMBenchFixture.add} score remains 1.98597 $<$ 2.0 and is not counted as
 a Phase 1 pass.
 
+Supplement: the independent 4650-case manifest has 4650 SUCCESS, 0 FAIL, 0
+TIMEOUT, 0 MISSING and 0 expected negatives. It is reconciled separately from
+the paper matrix and is not added to the 2602 count.
+
 \section{Capability judgment}
 Within the model, Phase 2 can build on LOCAL\_VISIBLE with bank/page reports, a
-bounded queue, output version gating and whole-kernel recovery. The study does
-not establish that a commercial device exposes these interfaces, that
-LOCAL\_HIDDEN reports reach an OS, that HOST\_ONLY PIM paths are recoverable, or
-that a persistent Rowhammer attack is isolated. The fault is one-shot and the
-recovery does not continue injection.
+bounded queue, output version gating and whole-kernel recovery. The supplement
+adds that timely control withholds an actually corrupted constructed escape
+output when a report arrives in the same kernel, while a silent F4S without a
+report is consumed. The study does not establish that a commercial device
+exposes these interfaces, that LOCAL\_HIDDEN reports reach an OS, that
+HOST\_ONLY PIM paths are recoverable, or that a persistent Rowhammer attack is
+isolated. It also does not establish that coarse bank/page/codeword reports
+identify whether multiple susceptible bits share one codeword: P1-H shows that
+bank/page cannot separate S4 from benign scenarios and codeword still cannot
+separate S4 from S6. The fault is one-shot and recovery does not continue
+injection.
 
 \section{Limitations}
 The ECC pipeline and energy are not modeled; host copy, interconnect and OS
@@ -222,6 +378,32 @@ P1-C uses the direct memory path, while P1-F uses the bounded feeder. The
 two-channel case uses independent host traffic, not a complete W1/W3 pair.
 Drop is a deterministic observation-gap injection. The 30 scenarios are not a
 population failure-probability estimate.
+
+The supplement's scrub is an idealized zero-cycle, zero-transaction rewrite;
+codeword reporting is an ASSUMED interface; F3M/F4S are constructed CoF-style
+patterns, not a Rowhammer probability model. Supplement injections occur once
+before the PIM kernel starts; the runtime locks the whole kernel output, not
+only the reported region; P1-H uses 10 seeds per (scenario, granularity,
+scrub). MASKED is FP16 rounding and is never counted as prevention.
+
+\section{Reproducibility}
+The paper matrix is reconstructible from \texttt{scripts/expand\_suite.py},
+\texttt{scripts/run\_suite.py}, \texttt{scripts/aggregate.py} and
+\texttt{scripts/plot\_paper.py}. The supplement is reconstructible from:
+
+\begin{verbatim}
+.venv/bin/python scripts/expand_supplement.py --suite configs/suite_supplement.yaml
+.venv/bin/python scripts/run_suite.py --manifest configs/generated/supplement-manifest.json \
+    --results-dir results/supplement --runs-dir runs/supplement --jobs 8 --resume
+.venv/bin/python scripts/aggregate_supplement.py
+.venv/bin/python scripts/plot_supplement.py
+\end{verbatim}
+
+The supplement manifest is
+\texttt{configs/generated/supplement-manifest.json}; runs are under
+\texttt{runs/supplement/} and evidence under \texttt{results/supplement/}.
+The smoke manifest is \texttt{supplement-smoke-manifest.json} (24 P1-G +
+33 P1-H).
 
 \bibliographystyle{plain}
 \bibliography{references}

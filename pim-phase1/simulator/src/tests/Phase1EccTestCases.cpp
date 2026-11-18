@@ -181,6 +181,73 @@ TEST(Phase1Ecc, ExhaustiveSingleAndDoubleBit)
     }
 }
 
+TEST(Phase1Ecc, EscapePatterns)
+{
+    const uint64_t escapeMask = (1ULL << 0) | (1ULL << 1) | (1ULL << 4) | (1ULL << 10);
+    const uint64_t s4Mask = (1ULL << 15) | (1ULL << 14);
+    const auto& dataPositions = Phase1Ecc::dataBitPositions();
+
+    // Pre-registered data-bit -> codeword-position mapping (supplement §4.1).
+    ASSERT_EQ(3u, dataPositions[0]);
+    ASSERT_EQ(5u, dataPositions[1]);
+    ASSERT_EQ(9u, dataPositions[4]);
+    ASSERT_EQ(15u, dataPositions[10]);
+    ASSERT_EQ(20u, dataPositions[14]);
+    ASSERT_EQ(21u, dataPositions[15]);
+
+    for (const Pattern& pattern : patterns())
+    {
+        const uint8_t parity = Phase1Ecc::encodeParity(pattern.data);
+        const auto wire = [&](std::initializer_list<unsigned> dataBits) {
+            auto codeword = codewordFrom(pattern.data, parity);
+            for (unsigned dataBit : dataBits)
+                codeword[dataPositions[dataBit] - 1] ^= 1u;
+            uint64_t mutatedData = 0;
+            uint8_t mutatedParity = 0;
+            fromCodeword(codeword, mutatedData, mutatedParity);
+            return Phase1Ecc::decode(mutatedData, mutatedParity);
+        };
+
+        // F1: data bit 15 -> corrected CE, original data.
+        const Phase1EccResult f1 = wire({15});
+        ASSERT_EQ(Phase1EccStatus::CORRECTED, f1.status) << pattern.name;
+        ASSERT_EQ(pattern.data, f1.data) << pattern.name;
+        ASSERT_EQ(21u, f1.syndrome) << pattern.name;
+        ASSERT_EQ(1u, f1.overall_parity) << pattern.name;
+
+        // F3M: data bits {0,1,4} -> syndrome 15, CE, wrong corrected data.
+        const Phase1EccResult f3m = wire({0, 1, 4});
+        ASSERT_EQ(Phase1EccStatus::CORRECTED, f3m.status) << pattern.name;
+        ASSERT_EQ(pattern.data ^ escapeMask, f3m.data) << pattern.name;
+        ASSERT_EQ(15u, f3m.syndrome) << pattern.name;
+        ASSERT_EQ(1u, f3m.overall_parity) << pattern.name;
+
+        // F4S: data bits {0,1,4,10} -> CLEAN, no report, same bad data.
+        const Phase1EccResult f4s = wire({0, 1, 4, 10});
+        ASSERT_EQ(Phase1EccStatus::CLEAN, f4s.status) << pattern.name;
+        ASSERT_EQ(pattern.data ^ escapeMask, f4s.data) << pattern.name;
+        ASSERT_EQ(f3m.data, f4s.data) << pattern.name;
+        ASSERT_EQ(0u, f4s.syndrome) << pattern.name;
+        ASSERT_EQ(0u, f4s.overall_parity) << pattern.name;
+
+        // S4 second bit: {15} then {14} -> UE.
+        const Phase1EccResult s4 = wire({15, 14});
+        ASSERT_EQ(Phase1EccStatus::UNCORRECTABLE, s4.status) << pattern.name;
+        ASSERT_EQ(pattern.data ^ s4Mask, s4.data) << pattern.name;
+        ASSERT_EQ(1u, s4.syndrome) << pattern.name;
+        ASSERT_EQ(0u, s4.overall_parity) << pattern.name;
+
+        // cw1 single bit: bitInBurst=79 is codeword 1, data bit 15.
+        ASSERT_EQ(1u, 79u / 64u);
+        ASSERT_EQ(15u, 79u % 64u);
+        const Phase1EccResult cw1 = wire({79u % 64u});
+        ASSERT_EQ(Phase1EccStatus::CORRECTED, cw1.status) << pattern.name;
+        ASSERT_EQ(pattern.data, cw1.data) << pattern.name;
+        ASSERT_EQ(21u, cw1.syndrome) << pattern.name;
+        ASSERT_EQ(1u, cw1.overall_parity) << pattern.name;
+    }
+}
+
 TEST(Phase1Storage, F1WitnessAndNoScrub)
 {
     Phase1Storage storage;

@@ -24,6 +24,17 @@ The Phase 1 scope is deliberately narrow:
 - no claim of real Rowhammer probability, real ECC layout, or a deployed
   operating-system notification path.
 
+The supplement extends this scope with two additional questions:
+
+- supplement P1-G: constructed ECC escapes (miscorrection F3M, silent F4S,
+  CE witness + silent) to test whether timely control withholds an actually
+  corrupted output;
+- supplement P1-H: multi-report sequences under bank/page/codeword granularity
+  with and without scrub, to test what coarse reports can distinguish.
+
+The supplement uses an independent 4650-case manifest. It is not counted in the
+2602 paper-matrix cases and does not change any paper result.
+
 ## 2. Fixed platform and assumptions
 
 | item | value |
@@ -70,6 +81,14 @@ The G8 manifest covers:
 | P1-E | 27 | 20 positive + 5 status negatives + 2 initialization controls |
 | P1-F cost | 480 | 2 sizes × 2 consumers × 30 seeds × 4 policies |
 | P1-F robustness | 18 | 3 Q × 3 I × 2 drop rates |
+
+The supplement uses a separate manifest and is not part of the 2602 cases:
+
+| supplement group | cases | scope |
+|---|---:|---|
+| P1-G Escape | 4320 | n_tiles 1/8 × HOST/PIM × 30 seeds × 4 fault configurations × 3 D/T_ref × 3 H/T_ref |
+| P1-H Sequence | 330 | 10 seeds × 3 granularities × (S1–S5 with/without scrub + S6 with scrub) |
+| **total** | **4650** | 4650 SUCCESS, 0 FAIL, 0 TIMEOUT, 0 MISSING |
 
 ### 3.2 Truth isolation
 
@@ -226,6 +245,98 @@ delivered. Overflow and drop accounting are exact.
 Evidence: `results/figure_data/fig6_cost.csv`,
 `fig6_robustness.csv`, `figures/fig06_cost.*`, `figures/figS1_robustness.*`.
 
+### 4.7 P1-G (supplement): does timely control stop a corrupted value?
+
+P1-G constructs ECC escapes rather than relying on a corrected single-bit CE.
+F3M flips data bits {0,1,4}: the decoder returns CORRECTED, reports a CE, but
+"corrects" data bit 10 and returns a wrong value. F4S flips {0,1,4,10}: the
+syndrome is zero, the decoder returns CLEAN, and there is no report. Both modes
+deliver exactly the same bad 64-bit value. F1W_F4S adds a corrected CE witness
+in one burst and a silent F4S in another burst, either in the same bank or a
+different bank. The evaluator runs only after the case, reads the held B storage
+for the corrupt burst, and never feeds truth or the corrupt address to the
+runtime. `PREVENTED` requires the output to be unpublished, the runtime lock to
+have fired, and the held B to be actually different from the fault-free B;
+`MASKED` means FP16 rounding made the final B/C byte-identical. MASKED is
+excluded from the control-fraction denominator and reported separately.
+
+For the n_tiles=8 HOST panel of Fig. 7, the 270 cases per fault configuration
+give:
+
+| fault configuration | PREVENTED | CORRUPT_CONSUMED | MASKED | total |
+|---|---:|---:|---:|---:|
+| F3M | 172 | 80 | 18 | 270 |
+| F4S | 0 | 252 | 18 | 270 |
+| F1W_F4S SAME_BANK | 180 | 81 | 9 | 270 |
+| F1W_F4S DIFF_BANK | 180 | 81 | 9 | 270 |
+
+Across the full 4320-case matrix the totals are PREVENTED 2166,
+CORRUPT_CONSUMED 1920, and MASKED 234. The shape is the expected control-window
+pattern: F3M prevents at small D and/or large H but consumes when the report is
+late; every unmasked F4S case is consumed because there is no report.
+
+For F3M, 28 of the 36 Fig. 3 cells have exactly the same fraction as
+TIMELY_CONTROL; the other 8 differ by at most 5.7 percentage points (3/9 in the
+n_tiles=8 HOST panel, all at D/T_ref 0.5 or 1). The difference is methodological:
+Fig. 3 uses all 30 seeds and classifies TIMELY_CONTROL from the runtime, whereas
+P1-G removes MASKED seeds and additionally requires the held B to be corrupt.
+The grid pattern is consistent; the small differences are not tuned away.
+The supplement reports 8/36 rather than forcing the pre-registered 27-cell
+denominator, because the executed matrix has 36 F3M cells. F1W_F4S SAME_BANK
+and DIFF_BANK have identical outcomes in 990/1080 matched cases; the 90
+differences are all one side MASKED while the other propagates, never a case
+where both propagate and one is prevented while the other is consumed. DIFF_BANK
+has `report_covers_corrupt_bank=false` in 1080/1080 cases, while SAME_BANK has
+true in 1080/1080: the current runtime locks the whole kernel on the witness CE,
+so it does not rely on the report covering the corrupt bank. A future
+region-selective recovery would miss the DIFF_BANK damage.
+
+Evidence: `results/supplement/figure_data/fig7_escape.csv`,
+`results/supplement/statistics_supplement.csv`,
+`figures/fig07_escape_efficacy.*`, `figures/figS2_escape_by_config.*`.
+
+### 4.8 P1-H (supplement): what a sequence of coarse reports can and cannot distinguish
+
+P1-H has 330 cases: 10 seeds over S1–S6, three public report granularities
+(bank, page, and the ASSUMED codeword interface), with and without the ASSUMED
+idealized scrub. S1 is one persistent bit; S2 is two independent errors in different
+codewords of one burst; S3 is the same bank and a different row; S4 is two
+susceptible bits in one codeword (the dangerous case); S5 is a different bank;
+S6 is the same bit flipped again after scrub. Each round reads P, Q, R in the
+same order. The public signature is `error_class:region_id` ordered by
+`report_seq` and excludes `report_cycle`.
+
+Only non-singleton equivalence groups are listed (10/10 seeds with identical
+signatures):
+
+| scrub | bank | page | codeword |
+|---|---|---|---|
+| 0 | S2 ≡ S3 | S2 ≡ S5 | none |
+| 1 | S2 ≡ S3 ≡ S4 ≡ S6 | S2 ≡ S4 ≡ S5 ≡ S6 | S4 ≡ S6 |
+
+Thus bank granularity cannot separate the dangerous S4 from the benign S2, S3
+or S6; page granularity also groups S4 with S2/S5/S6; codeword granularity
+separates S2 and S3 from S4, but still cannot separate S4 from S6. This is the
+central P1-H result: finer reports help, but do not reveal whether two
+susceptible bits share one codeword.
+
+The CoF-style rule (fire when one region receives at least two CEs) gives:
+
+| granularity, scrub=1 | scenarios firing 10/10 |
+|---|---|
+| bank | S2, S3, S4, S6 |
+| page | S2, S4, S5, S6 |
+| codeword | S4, S6 |
+
+The rule fires on the dangerous S4, but also on benign S2/S3/S6 (bank) or S6
+(codeword); it therefore cannot identify S4 by itself. With scrub=0, S4
+produces UE in 10/10 seeds at all three granularities, so it becomes
+distinguishable only after the error is already uncorrectable. No other
+scenario produces UE.
+
+Evidence: `results/supplement/figure_data/fig8_signatures.csv`,
+`fig8_pairs.csv`, `fig8_cof_rule.csv`, `figures/fig08_report_ambiguity.*`.
+
 ## 5. Failure categories and expected negatives
 
 - Manifest: 2602 cases.
@@ -241,6 +352,10 @@ The 7 expected negatives are `CHECKPOINT_MISSING`, `VERSION_MISMATCH`,
 known upstream performance failure (1.98597 < 2.0); it is not counted as a
 Phase 1 pass and no threshold was changed.
 
+Supplement: the independent 4650-case manifest has 4650 SUCCESS, 0 FAIL, 0
+TIMEOUT, 0 MISSING and 0 expected negatives. It is reconciled separately from
+the paper matrix and is not added to the 2602 count.
+
 ## 6. Figures and data
 
 | figure | data | sample |
@@ -252,6 +367,9 @@ Phase 1 pass and no threshold was changed.
 | Fig. 5 restore | `fig5_restore.csv` | 20 P1-E |
 | Fig. 6 cost | `fig6_cost.csv` | 480 P1-F cost |
 | Fig. S1 robustness | `fig6_robustness.csv` | 18 P1-F robust |
+| Fig. 7 escape efficacy | `results/supplement/figure_data/fig7_escape.csv` | 1080 (n_tiles=8 HOST) |
+| Fig. 8 report ambiguity | `results/supplement/figure_data/fig8_pairs.csv` | 330 cases / 90 pairs |
+| Fig. S2 escape by config | `results/supplement/figure_data/fig7_escape.csv` | 4320 |
 
 `figures/captions.md` defines every cell, unit, denominator, filtering rule and
 model assumption. `figures/plot_manifest.json` records input/output hashes,
@@ -267,13 +385,20 @@ Within the model, Phase 1 supports a Phase 2 study under these conditions:
   that can hold an output version and quiesce the target channel;
 - a trusted A/X checkpoint and a whole-kernel restart, not an in-place repair
   of a committed output;
-- single-channel or independent-channel traffic, with a channel-level pause.
+- single-channel or independent-channel traffic, with a channel-level pause;
+- supplement: timely control withholds an actually corrupted constructed
+  escape output when a report arrives in the same kernel (P1-G); F4S without a
+  report is consumed.
 
 It does **not** establish:
 
 - that a commercial HBM-PIM product exposes these ECC/control interfaces;
 - that LOCAL_HIDDEN reports are available to an OS/runtime;
 - that HOST_ONLY PIM paths are recoverable (they can be format-unsupported);
+- that coarse (bank/page/codeword) reports identify whether multiple
+  susceptible bits share one codeword; P1-H shows that bank/page cannot
+  separate S4 from benign scenarios, and codeword still cannot separate S4
+  from S6;
 - that a persistent or ongoing Rowhammer attack is isolated; the study injects
   one storage fault and does not continue injection during recovery.
 
@@ -292,6 +417,12 @@ It does **not** establish:
   model.
 - The study uses 30 scenarios per main config; it does not estimate a
   population failure probability.
+- Supplement: scrub is an idealized zero-cycle, zero-transaction rewrite; the
+  codeword report granularity is an ASSUMED interface; F3M/F4S are constructed
+  CoF-style patterns, not a Rowhammer probability model.
+- Supplement injections are performed once before the PIM kernel starts; the
+  runtime locks the whole kernel output, not only a reported region, and P1-H
+  uses 10 seeds per (scenario, granularity, scrub).
 
 ## 9. Reproducibility
 
@@ -309,6 +440,22 @@ The run tree includes `configs/generated/paper/<run_id>/config.json`,
 `runs/paper/<run_id>/`, `environment/source.patch`, `environment/source_g8.patch`,
 G0-G8 locks, and the clean-replay smoke. The artifact and hash manifest are
 described in `artifact/MANIFEST.sha256` and `artifact/ARCHIVE.sha256`.
+
+The supplement is reconstructible from:
+
+```bash
+.venv/bin/python scripts/expand_supplement.py --suite configs/suite_supplement.yaml
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/supplement-manifest.json \
+  --results-dir results/supplement --runs-dir runs/supplement --jobs 8 --resume
+.venv/bin/python scripts/aggregate_supplement.py
+.venv/bin/python scripts/plot_supplement.py
+```
+
+The supplement manifest is `configs/generated/supplement-manifest.json`, the
+run tree is `runs/supplement/<run_id>/`, and its evidence is under
+`results/supplement/`. The smoke subset is
+`configs/generated/supplement-smoke-manifest.json` (24 P1-G + 33 P1-H).
 
 ## 10. References
 

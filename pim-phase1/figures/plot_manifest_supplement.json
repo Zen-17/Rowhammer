@@ -1,0 +1,187 @@
+{
+  "generated_utc": "2026-11-16T11:27:44+00:00",
+  "stat_seed": 20261115,
+  "bootstrap_resamples": 10000,
+  "figures": [
+    {
+      "figure": "fig07_escape_efficacy",
+      "inputs": [
+        {
+          "path": "results/supplement/figure_data/fig7_escape.csv",
+          "sha256": "645053b5ae2c2880cb343dda2f30fef61f5976ea3f0551e0756b9f663b355b2b"
+        }
+      ],
+      "columns": [
+        "consumed",
+        "consumer",
+        "corruption_propagates",
+        "delay_ratio",
+        "escape_outcome",
+        "escape_placement",
+        "fault_kind",
+        "held_output_corrupt",
+        "hold_cycles",
+        "hold_ratio",
+        "n_tiles",
+        "outcome_class",
+        "output_changed",
+        "published",
+        "report_covers_corrupt_bank",
+        "seed",
+        "transport_delay_cycles"
+      ],
+      "filters": {
+        "n_tiles": 8,
+        "consumer": "HOST",
+        "fault_configs": [
+          "F3M/NONE",
+          "F1W_F4S/SAME_BANK",
+          "F1W_F4S/DIFF_BANK",
+          "F4S/NONE"
+        ]
+      },
+      "sample_count": 1080,
+      "aggregation": "C/P counts over 30 seeds; color = CORRUPT_CONSUMED/(n\u2212MASKED); m=MASKED",
+      "outputs": [
+        {
+          "path": "figures/fig07_escape_efficacy.pdf",
+          "sha256": "01b2cb427b115169ca0f15d0aec497db18159f26a1cbcb6a0bee938895fbd2c4"
+        },
+        {
+          "path": "figures/fig07_escape_efficacy.svg",
+          "sha256": "83ea6122c4364e110b717a39de9d3d1f1e9e4eae3dae95f3382601add9cb76eb"
+        },
+        {
+          "path": "figures/fig07_escape_efficacy.png",
+          "sha256": "136a4c8cfef67bbfe18a6c4fcb016e6ac1c2dbd5f10e47d35b710139bcd3f18c"
+        },
+        {
+          "path": "figures/gray/fig07_escape_efficacy.png",
+          "sha256": "2a28ed1a1da5c7a910ee408fa4264f9505d25d9caaa7f312d9f79edc772afd2f"
+        }
+      ]
+    },
+    {
+      "figure": "figS2_escape_by_config",
+      "inputs": [
+        {
+          "path": "results/supplement/figure_data/fig7_escape.csv",
+          "sha256": "645053b5ae2c2880cb343dda2f30fef61f5976ea3f0551e0756b9f663b355b2b"
+        }
+      ],
+      "columns": [
+        "consumed",
+        "consumer",
+        "corruption_propagates",
+        "delay_ratio",
+        "escape_outcome",
+        "escape_placement",
+        "fault_kind",
+        "held_output_corrupt",
+        "hold_cycles",
+        "hold_ratio",
+        "n_tiles",
+        "outcome_class",
+        "output_changed",
+        "published",
+        "report_covers_corrupt_bank",
+        "seed",
+        "transport_delay_cycles"
+      ],
+      "filters": {
+        "n_tiles": [
+          1,
+          8
+        ],
+        "consumer": [
+          "HOST",
+          "PIM"
+        ],
+        "fault_configs": [
+          "F3M/NONE",
+          "F1W_F4S/SAME_BANK",
+          "F1W_F4S/DIFF_BANK",
+          "F4S/NONE"
+        ]
+      },
+      "sample_count": 4320,
+      "aggregation": "C/P counts over 30 seeds per cell; color = CORRUPT_CONSUMED/(n\u2212MASKED)",
+      "outputs": [
+        {
+          "path": "figures/figS2_escape_by_config.pdf",
+          "sha256": "9fa73dc9176293d0163fa21063b733fcb85c7a08f415d0d9d4ebd669aaa64923"
+        },
+        {
+          "path": "figures/figS2_escape_by_config.svg",
+          "sha256": "fd6157ffc13a7fa41c88f327445d68b311585c7c5582d1b93b0297aee53e9ed2"
+        },
+        {
+          "path": "figures/figS2_escape_by_config.png",
+          "sha256": "4db36b3d9c2d4e1bcfc24e63e21840832fad174f298722d758ab1dc9e3e47e2e"
+        },
+        {
+          "path": "figures/gray/figS2_escape_by_config.png",
+          "sha256": "3f6c7f3976696e6d048bd25a78b29c3348f0678eb38f929fd2de77015ede7137"
+        }
+      ]
+    },
+    {
+      "figure": "fig08_report_ambiguity",
+      "inputs": [
+        {
+          "path": "results/supplement/figure_data/fig8_pairs.csv",
+          "sha256": "03e7c595819361284f4a26640da5494cd2c9a87ed2e307392db9c99b688eddc4"
+        }
+      ],
+      "columns": [
+        "granularity",
+        "identical_with_timing_seeds",
+        "indistinguishable_seeds",
+        "n_seeds",
+        "note",
+        "scenario_i",
+        "scenario_j",
+        "scrub"
+      ],
+      "filters": {
+        "scenarios": [
+          "S1_SINGLE",
+          "S2_DIFF_CW",
+          "S3_DIFF_BURST_SAME_BANK",
+          "S4_SAME_CW_TWO_BITS",
+          "S5_DIFF_BANK",
+          "S6_SAME_BIT_RECUR"
+        ],
+        "scrub": [
+          0,
+          1
+        ],
+        "granularities": [
+          "bank",
+          "page",
+          "codeword"
+        ]
+      },
+      "sample_count": 330,
+      "aggregation": "off-diagonal scenario pairs only; color = identical-report seeds / 10; zero cells left blank; S6 scrub=0 hatched; diagonal omitted",
+      "outputs": [
+        {
+          "path": "figures/fig08_report_ambiguity.pdf",
+          "sha256": "e39202d8d028d458d0d95dfc8133cd65e696b189faa0b79a6905034807de5b33"
+        },
+        {
+          "path": "figures/fig08_report_ambiguity.svg",
+          "sha256": "af24b3dcd9ceb3e33ca383cc43e18c59fc80488c9ddf2a76f112f8e5a2d14016"
+        },
+        {
+          "path": "figures/fig08_report_ambiguity.png",
+          "sha256": "b1be8be7d7c1155674d66697e29db75bbf9febe97d3889245f78d56ee847bdc8"
+        },
+        {
+          "path": "figures/gray/fig08_report_ambiguity.png",
+          "sha256": "fa34eefcdaa81a970d370c2dc9dd0eb3e9969650a73ad6953a940d49faf47066"
+        }
+      ]
+    }
+  ]
+}

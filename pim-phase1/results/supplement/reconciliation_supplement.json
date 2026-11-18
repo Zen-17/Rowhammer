@@ -1,0 +1,25 @@
+{
+  "generated_utc": "2026-11-16T11:16:51+00:00",
+  "manifest_total": 4650,
+  "manifest_by_group": {
+    "P1-G Escape": 4320,
+    "P1-H Sequence": 330
+  },
+  "executed_p1g": 4320,
+  "executed_p1h": 330,
+  "runner_counts": {
+    "SUCCESS": 4650,
+    "EXPECTED_NEGATIVE": 0,
+    "FAIL": 0,
+    "TIMEOUT": 0
+  },
+  "runner_pass": true,
+  "missing": 0,
+  "figure_data": {
+    "fig7_escape": 4320,
+    "fig8_signatures": 330,
+    "fig8_pairs": 90,
+    "fig8_cof_rule": 36,
+    "statistics_supplement": 432
+  }
+}

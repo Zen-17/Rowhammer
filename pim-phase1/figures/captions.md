@@ -1,10 +1,12 @@
 # Figure captions and data provenance
 
-All figures are rendered from `results/figure_data/*.csv` by
-`scripts/plot_paper.py`. Statistics use `STAT_SEED=20261115` and 10000
-bootstrap resamples; proportions use Wilson 95% intervals. The plot manifest
-is `figures/plot_manifest.json`; it records input/output SHA256, columns,
-filters, sample counts, aggregation, and output hashes.
+Paper figures are rendered from `results/figure_data/*.csv` by
+`scripts/plot_paper.py`; supplement figures are rendered from
+`results/supplement/figure_data/*.csv` by `scripts/plot_supplement.py`.
+Statistics use `STAT_SEED=20261115` and 10000 bootstrap resamples; proportions
+use Wilson 95% intervals. Plot manifests are `figures/plot_manifest.json` and
+`figures/plot_manifest_supplement.json`; they record input/output SHA256,
+columns, filters, sample counts, aggregation, and output hashes.
 
 ## Fig. 1 — Path coverage
 
@@ -127,3 +129,72 @@ filters, sample counts, aggregation, and output hashes.
   inspected at PNG size; grayscale copies are under `figures/gray/`.
 - The caption/source table above is intended to travel with the figures and is
   also summarized in `report/phase1_results.md`.
+
+## Supplement figures
+
+The supplement figures are rendered by `scripts/plot_supplement.py` from
+`results/supplement/figure_data/*.csv`. Their manifest is
+`figures/plot_manifest_supplement.json` and records input/output SHA256,
+columns, filters, sample counts, aggregation and model assumptions.
+
+## Supplementary Fig. 7 — Escape efficacy
+
+`figures/fig07_escape_efficacy.{pdf,svg,png}`
+
+- Source: `results/supplement/figure_data/fig7_escape.csv`.
+- Matrix: four constructed escape configurations: F3M (miscorrection with a
+  CE report), F1W_F4S SAME_BANK, F1W_F4S DIFF_BANK, and F4S (silent, no report);
+  n_tiles=8, HOST consumer. x = H/T_ref; y = D/T_ref.
+- Color: CORRUPT_CONSUMED / (n − MASKED); n′ = 30 − MASKED. Cell text:
+  `C` = corrupt-consumed count; `P` = prevented count. The panel subtitle gives
+  n′ and MASKED. MASKED means FP16 rounding hides the corrupted value; it is
+  excluded from the fraction denominator but reported separately.
+- Sample: 4 configurations × 9 D/H cells × 30 seeds = 1080 cases.
+- Failure handling: all 1080 cases are contract-pass; no case is all-masked in
+  this matrix. Failures/timeouts are listed in the supplement validation and
+  are not plotted as zero.
+- Model assumption: F3M/F4S are constructed CoF-style bit patterns, not a
+  Rowhammer probability model. F3M and F4S deliver the same bad data; only
+  F3M produces a report. This panel uses the LOCAL_VISIBLE bank report model
+  and the HOST consumer only; the full size/consumer matrix is Fig. S2.
+
+## Supplementary Fig. 8 — Report-sequence ambiguity
+
+`figures/fig08_report_ambiguity.{pdf,svg,png}`
+
+- Source: `results/supplement/figure_data/fig8_pairs.csv` (from the 330-case
+  `fig8_signatures.csv`).
+- Layout: rows scrub=0/1; columns bank/page/codeword. Each panel is a
+  scenario × scenario matrix. Scenarios: S1 one error bit; S2 independent
+  errors in different codewords (same burst); S3 different codeword, same bank
+  and different row; S4 two susceptible bits in one codeword (danger case);
+  S5 different bank; S6 the same bit flipped again after scrub.
+- Color: fraction of 10 seeds whose public `report_signature` is identical.
+  Off-diagonal cells only; the diagonal is omitted. A blank cell means 0/10;
+  cells with k>0 are annotated `k/10`. Hatching marks S6 at scrub=0, which was
+  not run because a second XOR at the same bit would undo the first.
+- Sample: 330 cases = 3 granularities × (5 scenarios × scrub 0/1 + S6 scrub 1)
+  × 10 seeds; 90 scenario-pair rows.
+- Failure handling: 330/330 contract-pass; 0 missing/timeout. S6 scrub=0 is
+  explicitly N/A, not 0%.
+- Model assumption: bank/page are model report granularities; codeword is an
+  ASSUMED interface. scrub is an idealized zero-cycle, zero-transaction
+  rewrite. `report_signature` excludes `report_cycle`; the timing-inclusive
+  signature is only in the CSV and is not the main figure.
+
+## Supplementary Fig. S2 — Escape by configuration
+
+`figures/figS2_escape_by_config.{pdf,svg,png}`
+
+- Source: `results/supplement/figure_data/fig7_escape.csv`.
+- Matrix: 4 rows = n_tiles 1/8 × consumer HOST/PIM; 4 columns = the same F3M,
+  F1W SAME_BANK, F1W DIFF_BANK and F4S configurations as Fig. 7.
+- Color and cell text are defined as in Fig. 7: color = CORRUPT_CONSUMED /
+  (n − MASKED); `C` and `P` are counts; panel subtitles give n′ and MASKED.
+- Sample: 4 × 4 panels × 9 D/H cells × 30 seeds = 4320 cases.
+- Failure handling: all 4320 cases are contract-pass; no case is all-masked.
+  MASKED is excluded only from the fraction denominator and is never merged
+  into PREVENTED.
+- Model assumption: all configurations are constructed escape patterns under
+  LOCAL_VISIBLE bank reports; n′ and MASKED are data-dependent, so the figure
+  must not be read as a hardware error-rate map.

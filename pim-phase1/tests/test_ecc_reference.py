@@ -132,6 +132,80 @@ def test_reference_double_bit(data):
             assert status == "UNCORRECTABLE", (hex(data), first, second)
 
 
+ESCAPE_MASK = (1 << 0) | (1 << 1) | (1 << 4) | (1 << 10)
+S4_MASK = (1 << 15) | (1 << 14)
+
+
+def mutate_codeword(data: int, parity: int, data_bits: tuple[int, ...]):
+    bits = codeword(data, parity)
+    for data_bit in data_bits:
+        bits[DATA_POSITIONS[data_bit] - 1] ^= 1
+    return from_codeword(bits)
+
+
+@pytest.mark.parametrize("data", PATTERNS)
+def test_escape_patterns(data):
+    """G11 pre-registered escape bit patterns (supplement §4.1).
+
+    F3M and F4S deliver the same corrupted data; only the report differs.
+    """
+    parity, _ = encode(data)
+
+    # Position mapping used by the pre-registered patterns.
+    assert DATA_POSITIONS[0] == 3
+    assert DATA_POSITIONS[1] == 5
+    assert DATA_POSITIONS[4] == 9
+    assert DATA_POSITIONS[10] == 15
+    assert DATA_POSITIONS[14] == 20
+    assert DATA_POSITIONS[15] == 21
+
+    # F1: one data bit 15 flip -> corrected CE, original data.
+    mutated_data, mutated_parity = mutate_codeword(data, parity, (15,))
+    status, corrected, syndrome, overall = decode(mutated_data, mutated_parity)
+    assert status == "CORRECTED"
+    assert corrected == data
+    assert syndrome == 21
+    assert overall == 1
+
+    # F3M: data bits {0,1,4} -> syndrome 15 (data bit 10) is "corrected"
+    # to the wrong value, and a CE is still reported.
+    mutated_data, mutated_parity = mutate_codeword(data, parity, (0, 1, 4))
+    status, corrected, syndrome, overall = decode(mutated_data, mutated_parity)
+    assert status == "CORRECTED"
+    assert corrected == data ^ ESCAPE_MASK
+    assert syndrome == 15
+    assert overall == 1
+
+    # F4S: data bits {0,1,4,10} -> syndrome 0, CLEAN, no report; the
+    # delivered data is exactly the same bad value as F3M.
+    mutated_data, mutated_parity = mutate_codeword(data, parity, (0, 1, 4, 10))
+    status, f4s_data, syndrome, overall = decode(mutated_data, mutated_parity)
+    assert status == "CLEAN"
+    assert f4s_data == data ^ ESCAPE_MASK
+    assert f4s_data == corrected
+    assert syndrome == 0
+    assert overall == 0
+
+    # S4 second bit: {15} then {14} -> syndrome 1, overall 0, UE.
+    mutated_data, mutated_parity = mutate_codeword(data, parity, (15, 14))
+    status, s4_data, syndrome, overall = decode(mutated_data, mutated_parity)
+    assert status == "UNCORRECTABLE"
+    assert s4_data == data ^ S4_MASK
+    assert syndrome == 1
+    assert overall == 0
+
+    # cw1 single bit: bitInBurst=79 is codeword 1, data bit 15; the ECC
+    # result is the same as F1 because codewords are independent.
+    assert 79 // 64 == 1
+    assert 79 % 64 == 15
+    mutated_data, mutated_parity = mutate_codeword(data, parity, (79 % 64,))
+    status, corrected, syndrome, overall = decode(mutated_data, mutated_parity)
+    assert status == "CORRECTED"
+    assert corrected == data
+    assert syndrome == 21
+    assert overall == 1
+
+
 @pytest.mark.skipif(not CPP_CSV.exists(), reason="C++ exhaustive CSV not generated")
 def test_cpp_exhaustive_crosscheck():
     with CPP_CSV.open(newline="") as fh:

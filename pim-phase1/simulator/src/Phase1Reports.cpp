@@ -20,8 +20,8 @@ Phase1Reports::Phase1Reports(const Phase1Address& address, unsigned num_channels
       deliver_ce_(deliver_ce),
       deliver_ue_(deliver_ue)
 {
-    if (granularity_ != "bank" && granularity_ != "page")
-        throw std::invalid_argument("report granularity must be bank or page");
+    if (granularity_ != "bank" && granularity_ != "page" && granularity_ != "codeword")
+        throw std::invalid_argument("report granularity must be bank, page or codeword");
     if (capacity_ == 0)
         throw std::invalid_argument("report queue capacity must be non-zero");
 }
@@ -59,11 +59,29 @@ void Phase1Reports::onDetected(const Phase1Detection& detection)
         item.region_id = static_cast<uint64_t>(detection.channel) * num_banks_ +
                          detection.actual_bank;
     }
-    else
+    else if (granularity_ == "page")
     {
         item.region_type = "page";
         const uint64_t hostAddress = address_.encode(tuple);
         item.region_id = hostAddress / 4096ULL;
+    }
+    else
+    {
+        // ASSUMED codeword-granularity interface.  Deterministic linear
+        // encoding of (channel, actual_bank, row, burst_column, codeword):
+        //   (((channel * num_banks + bank) * num_rows + row) * burst_columns
+        //     + burst_column) * 4 + codeword_index
+        const Phase1Geometry& geometry = address_.geometry();
+        item.region_type = "codeword";
+        item.region_id =
+            (((static_cast<uint64_t>(detection.channel) * num_banks_ +
+               detection.actual_bank) *
+                  geometry.num_rows +
+              detection.row) *
+                 geometry.burst_columns() +
+             detection.burst_column) *
+                4ULL +
+            detection.codeword_index;
     }
 
     if (pending_.size() >= capacity_)

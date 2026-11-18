@@ -1,0 +1,36 @@
+{
+  "run_id": "9d441fb33c4c3eac",
+  "group": "P1-H Sequence",
+  "group_key": "P1H",
+  "fixture": "Phase1G11SequenceFixture.RunCase",
+  "params": {
+    "experiment": "P1H",
+    "device_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "system_ini": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/configs/phase1_system_1ch.ini",
+    "profile": "LOCAL_VISIBLE",
+    "scenario": "S1_SINGLE",
+    "granularity": "bank",
+    "scrub": "1",
+    "seed": "1",
+    "bank_p": "7",
+    "bank_r": "15",
+    "rounds": "4",
+    "transport_delay_cycles": "0",
+    "service_interval_cycles": "1",
+    "report_queue_capacity": "64",
+    "watchdog_cycles": "200000",
+    "output_dir": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/supplement/9d441fb33c4c3eac"
+  },
+  "case": {
+    "case_id": "P1H_S1_SINGLE_bank_scrub1_s1",
+    "scenario": "S1_SINGLE",
+    "granularity": "bank",
+    "scrub": 1,
+    "seed": 1,
+    "bank_p": 7,
+    "bank_r": 15,
+    "rounds": 4,
+    "out": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1/runs/supplement/9d441fb33c4c3eac"
+  },
+  "expected_negative": false
+}

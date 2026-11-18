@@ -1,0 +1,31 @@
+{
+  "gate": "G8",
+  "pass": true,
+  "checks": {
+    "manifest_case_count": true,
+    "full_manifest_case_count": true,
+    "count_reconciliation": true,
+    "expected_negative_count": true,
+    "no_failures": true,
+    "no_timeouts": true,
+    "all_success_cases_pass": true,
+    "all_expected_negatives_pass": true
+  },
+  "manifest": "configs/generated/regression_g10-manifest.json",
+  "manifest_sha256": "c19b62327b8737f00c4a775f447dd26b41e3ed752758bdd7cfe948a8988480c3",
+  "binary_sha256": "ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082",
+  "patch_sha256": "93daf08c1428bfd23f9f4cfadd2d5e5cd650b625ac84a7987adbd70601a40192",
+  "started_utc": "2026-11-16T10:08:25+00:00",
+  "finished_utc": "2026-11-16T10:08:34+00:00",
+  "manifest_total": 240,
+  "selected_total": 240,
+  "executed_total": 240,
+  "expected_negative": 0,
+  "counts": {
+    "SUCCESS": 240,
+    "EXPECTED_NEGATIVE": 0,
+    "FAIL": 0,
+    "TIMEOUT": 0
+  },
+  "failure_count": 0
+}

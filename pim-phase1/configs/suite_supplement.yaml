@@ -1,0 +1,38 @@
+schema_version: 1
+suite: supplement
+calibration: results/g8/calibration.json
+smoke: false
+
+groups:
+  P1G:
+    fixture: Phase1G10EscapeFixture.RunCase
+    profile: LOCAL_VISIBLE
+    granularity: bank
+    n_tiles: [1, 8]
+    consumers: [HOST, PIM]
+    seed_start: 0
+    seed_stop: 29
+    fault_configs:
+      - [F3M, NONE]
+      - [F4S, NONE]
+      - [F1W_F4S, SAME_BANK]
+      - [F1W_F4S, DIFF_BANK]
+    delay_ratios: [0.0, 0.5, 1.0]
+    hold_ratios: [0.0, 0.25, 1.0]
+    handler_delay_cycles: 8
+    service_interval_cycles: 1
+    report_queue_capacity: 64
+    watchdog_cycles: 400000
+
+  P1H:
+    fixture: Phase1G11SequenceFixture.RunCase
+    profile: LOCAL_VISIBLE
+    seed_start: 0
+    seed_stop: 9
+    scenarios: [S1_SINGLE, S2_DIFF_CW, S3_DIFF_BURST_SAME_BANK, S4_SAME_CW_TWO_BITS, S5_DIFF_BANK, S6_SAME_BIT_RECUR]
+    granularities: [bank, page, codeword]
+    rounds: 4
+    transport_delay_cycles: 0
+    service_interval_cycles: 1
+    report_queue_capacity: 64
+    watchdog_cycles: 200000

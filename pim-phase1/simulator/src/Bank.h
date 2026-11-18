@@ -66,6 +66,11 @@ class Bank
 
     void setIdentity(unsigned channel, unsigned rank, unsigned actual_bank);
     void setPhase1(Phase1Profile profile, Phase1ReportSink* reportSink);
+    // ASSUMED, idealized zero-cost scrub: when enabled, a corrected read
+    // rewrites the corrected codeword and increments this counter.  Default
+    // false preserves the pre-G13 read path byte-for-byte.
+    void setPhase1Scrub(bool enabled) { phase1Scrub_ = enabled; }
+    uint64_t phase1ScrubWrites() const { return phase1ScrubWrites_; }
     void injectRawDataBit(unsigned row, unsigned burstColumn, unsigned bitInBurst);
     void injectRawParityBit(unsigned row, unsigned burstColumn, unsigned codeword, unsigned bit);
     uint64_t dataAccessCount() const { return dataAccessCount_; }
@@ -89,6 +94,8 @@ class Bank
     Phase1Profile profile_ = Phase1Profile::NATIVE;
     Phase1ReportSink* reportSink_ = nullptr;
     Phase1Storage phase1Storage_;
+    bool phase1Scrub_ = false;
+    uint64_t phase1ScrubWrites_ = 0;
     uint64_t dataAccessCount_ = 0;
 };
 }  // namespace DRAMSim

@@ -165,6 +165,148 @@ def validate_robust(case: dict, run_dir: Path, metrics: dict) -> tuple[bool, dic
     return all(checks.values()), checks
 
 
+def read_csv_rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open(newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def validate_p1g(case: dict, run_dir: Path, metrics: dict) -> tuple[bool, dict]:
+    params = case["params"]
+    n_tiles = int(params["n_tiles"])
+    dim = n_tiles * 128
+    fault = params["fault_kind"]
+    placement = params["escape_placement"]
+    reports = read_csv_rows(run_dir / "reports.csv")
+    truth = read_csv_rows(run_dir / "truth.csv")
+    injections = [row for row in truth if row["record_type"] == "INJECTION"]
+    status_by_access = {
+        row["target_access_id"]: row["decoder_status"] for row in injections}
+    corrupt_burst = metrics.get("corrupt_burst")
+    witness_burst = metrics.get("witness_burst")
+    region_ids = [int(row["region_id"]) for row in reports]
+    published = metrics.get("published") is True
+    consumed = metrics.get("consumed") is True
+    if metrics.get("timeout") is True:
+        expected_escape = "TIMEOUT"
+    elif metrics.get("corruption_propagates") is not True:
+        expected_escape = "MASKED"
+    elif consumed and metrics.get("output_changed") is True:
+        expected_escape = "CORRUPT_CONSUMED"
+    elif (not published and int(metrics.get("lock_cycle") or 0) != 0
+          and metrics.get("held_output_corrupt") is True):
+        expected_escape = "PREVENTED"
+    else:
+        expected_escape = "UNCLASSIFIED"
+
+    expected_injections = 2 if fault == "F1W_F4S" else 1
+    if corrupt_burst is None:
+        corrupt_status = None
+    else:
+        corrupt_status = status_by_access.get(f"A_burst_{corrupt_burst}")
+    if witness_burst is None:
+        witness_status = None
+    else:
+        witness_status = status_by_access.get(f"A_burst_{witness_burst}")
+    corrupt_bank = metrics.get("corrupt_bank")
+    expected_cover = (corrupt_bank is not None
+                      and any(row["region_type"] == "bank"
+                              and int(row["region_id"]) == int(corrupt_bank)
+                              for row in reports))
+    output_changed_ok = (
+        (metrics.get("output_changed") is (not metrics.get("output_bit_exact")))
+        if consumed else metrics.get("output_changed") is None)
+    output_path = run_dir / "output.bin"
+    checks = {
+        "no_timeout": metrics.get("timeout") is False,
+        "contract_pass": metrics.get("contract_pass") is True,
+        "escape_outcome_known": metrics.get("escape_outcome") in {
+            "PREVENTED", "CORRUPT_CONSUMED", "MASKED"},
+        "escape_outcome_consistency": metrics.get("escape_outcome") == expected_escape,
+        "injection_count": len(injections) == expected_injections,
+        "report_count": len(reports) == metrics.get("delivered_reports"),
+        "drop_accounting": metrics.get("dropped_reports") == 0,
+        "delivery_accounting": (
+            metrics.get("delivered_reports", 0) <= metrics.get("detected_events", 0)),
+        "internal_ue_zero": metrics.get("internal_ue") == 0,
+        "report_region_ids": region_ids == metrics.get("report_region_ids"),
+        "report_covers_corrupt_bank": (
+            metrics.get("report_covers_corrupt_bank") == expected_cover),
+        "published_consumed_consistent": (
+            (published and consumed) or (not published and not consumed)),
+        "output_changed_consistent": output_changed_ok,
+        "held_output_published_null": (not published or metrics.get("held_output_corrupt") is None),
+        "output_size": (not consumed) or (
+            output_path.exists() and output_path.stat().st_size == dim * 32),
+    }
+    if fault == "F3M":
+        checks["f3m_detected"] = metrics.get("detected_events", 0) >= 1
+        checks["f3m_decoder_corrected"] = corrupt_status == "CORRECTED"
+    elif fault == "F4S":
+        checks["f4s_no_detection"] = (
+            metrics.get("detected_events") == 0
+            and metrics.get("delivered_reports") == 0)
+        checks["f4s_decoder_clean"] = corrupt_status == "CLEAN"
+    else:
+        checks["f1w_distinct_bursts"] = (
+            corrupt_burst is not None and witness_burst is not None
+            and corrupt_burst != witness_burst)
+        checks["f1w_detected"] = metrics.get("detected_events", 0) >= 1
+        checks["f1w_decoder_statuses"] = (
+            witness_status == "CORRECTED" and corrupt_status == "CLEAN")
+    return all(checks.values()), checks
+
+
+def validate_p1h(case: dict, run_dir: Path, metrics: dict) -> tuple[bool, dict]:
+    params = case["params"]
+    scenario = params["scenario"]
+    granularity = params["granularity"]
+    scrub = int(params["scrub"])
+    reports = read_csv_rows(run_dir / "reports.csv")
+    truth = read_csv_rows(run_dir / "truth.csv")
+    injections = [row for row in truth if row["record_type"] == "INJECTION"]
+    detections = [row for row in truth if row["record_type"] == "DETECTION"]
+    expected_injections = 1 if scenario == "S1_SINGLE" else 2
+    expected_scrub = 0 if scrub == 0 else (1 if scenario == "S1_SINGLE" else 2)
+    signature = ";".join(
+        f"{row['error_class']}:{row['region_id']}" for row in reports)
+    region_ok = True
+    if granularity in ("bank", "codeword"):
+        expected_ids = []
+        for detection in detections:
+            fields = dict(part.split("=") for part in detection["storage_key"].split(","))
+            bank = int(fields["bank"])
+            row = int(fields["row"])
+            column = int(fields["burst_col"])
+            codeword = int(fields["cw"])
+            if granularity == "bank":
+                expected_ids.append(bank)
+            else:
+                expected_ids.append(
+                    (((bank * 16384 + row) * 32 + column) * 4 + codeword))
+        region_ok = sorted(expected_ids) == sorted(int(row["region_id"]) for row in reports)
+    checks = {
+        "no_timeout": metrics.get("timeout") is False,
+        "contract_pass": metrics.get("contract_pass") is True,
+        "injection_count": len(injections) == expected_injections,
+        "detection_count": len(detections) == metrics.get("detected_events"),
+        "report_count": len(reports) == metrics.get("delivered_reports"),
+        "delivery_accounting": (
+            metrics.get("delivered_reports") == metrics.get("detected_events")),
+        "internal_accounting": (
+            metrics.get("internal_ce", 0) + metrics.get("internal_ue", 0)
+            == metrics.get("detected_events")),
+        "report_signature": metrics.get("report_signature") == signature,
+        "region_type": all(row["region_type"] == granularity for row in reports),
+        "region_ids": region_ok,
+        "scrub_writes": metrics.get("scrub_writes") == expected_scrub,
+        "rounds": metrics.get("rounds") == 4,
+        "s6_scrub": scenario != "S6_SAME_BIT_RECUR" or scrub == 1,
+    }
+    return all(checks.values()), checks
+
+
 def validate_case(case: dict) -> tuple[bool, dict, dict]:
     run_dir = Path(case["case"]["out"])
     metrics = json.loads((run_dir / "metrics.json").read_text())
@@ -189,6 +331,10 @@ def validate_case(case: dict) -> tuple[bool, dict, dict]:
         passed, checks = validate_cost(case_meta, run_dir, metrics)
     elif group == "P1-F Robustness":
         passed, checks = validate_robust(case_meta, run_dir, metrics)
+    elif group == "P1-G Escape":
+        passed, checks = validate_p1g(case, run_dir, metrics)
+    elif group == "P1-H Sequence":
+        passed, checks = validate_p1h(case, run_dir, metrics)
     else:
         raise ValueError(f"unknown group: {group}")
     return bool(passed), checks, metrics
@@ -354,7 +500,13 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--group", default="")
+    parser.add_argument("--results-dir", default=str(RESULTS),
+                        help="directory for runner summaries (default: results/g8)")
+    parser.add_argument("--runs-dir", default=str(RUNS),
+                        help="directory for run-level manifest (default: runs/paper)")
     args = parser.parse_args()
+    results_dir = Path(args.results_dir).resolve()
+    runs_dir = Path(args.runs_dir).resolve()
 
     manifest_path = Path(args.manifest).resolve()
     manifest = json.loads(manifest_path.read_text())
@@ -363,8 +515,8 @@ def main() -> int:
         cases = [c for c in cases if c["group"] == args.group]
     if args.limit:
         cases = cases[:args.limit]
-    RUNS.mkdir(parents=True, exist_ok=True)
-    RESULTS.mkdir(parents=True, exist_ok=True)
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
     binary_sha = sha256(SIM)
     patch_path = ROOT / "environment/source.patch"
     patch_sha = sha256(patch_path) if patch_path.exists() else "MISSING"
@@ -433,11 +585,11 @@ def main() -> int:
             failures.append(row)
 
     fieldnames = list(rows[0].keys()) if rows else []
-    with (RESULTS / "run_metrics.csv").open("w", newline="") as handle:
+    with (results_dir / "run_metrics.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-    with (RESULTS / "failure_cases.csv").open("w", newline="") as handle:
+    with (results_dir / "failure_cases.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(failures)
@@ -455,7 +607,7 @@ def main() -> int:
             "timeout": sum(1 for row in group_rows if row["status"] == "TIMEOUT"),
             "contract_pass": sum(1 for row in group_rows if row["contract_pass"] is True),
         })
-    with (RESULTS / "summary.csv").open("w", newline="") as handle:
+    with (results_dir / "summary.csv").open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(summary_rows[0].keys())
                                 if summary_rows else [])
         writer.writeheader()
@@ -497,8 +649,8 @@ def main() -> int:
         "counts": counts,
         "failure_count": len(failures),
     }
-    (RESULTS / "validation.json").write_text(json.dumps(validation, indent=2) + "\n")
-    (RUNS / "run_manifest.json").write_text(json.dumps({
+    (results_dir / "validation.json").write_text(json.dumps(validation, indent=2) + "\n")
+    (runs_dir / "run_manifest.json").write_text(json.dumps({
         "gate": "G8",
         "manifest": str(manifest_path.relative_to(ROOT)),
         "manifest_sha256": sha256(manifest_path),

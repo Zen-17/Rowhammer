@@ -1326,3 +1326,1110 @@ logs/g9_*.log
 ### 7. Phase 1 完成
 
 G0–G9 全部完成。后续如继续，应按新任务重新规划，不修改已完成的证据、阈值或预期结果。
+
+## G10 — 补充实验环境、回归基线与预注册
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` G10。工作目录：`pim-phase1/`。
+
+### 1. 实际改动的文件
+
+新增：
+
+```text
+scripts/make_regression_manifest.py
+scripts/compare_regression.py
+docs/g10_supplement_protocol.md
+configs/generated/regression_g10-manifest.json
+results/regression_g10/compare.csv
+results/regression_g10/compare_summary.txt
+results/regression_g10/frozen_sha256.txt
+results/regression_g10/run_metrics.csv
+results/regression_g10/summary.csv
+results/regression_g10/validation.json
+runs/regression_g10/<240 run dirs>/
+logs/g10_apt_install.log
+logs/g10_python_env.log
+logs/g10_git_restore.log
+logs/g10_regression_run.log
+```
+
+修改：
+
+```text
+scripts/run_suite.py                 # 新增 --results-dir（默认 results/g8）和 --runs-dir（默认 runs/paper）
+docs/STATUS.md                       # G10 状态、证据、下一关
+docs/implementation_log.md           # 本节
+```
+
+构建脚本实际重写（非冻结文件）：
+
+```text
+environment/binary.json
+environment/binary.sha256
+environment/build_flags.txt
+runs/baseline/binary.json
+runs/baseline/binary.sha256
+logs/build_20261116T100819Z.log
+```
+
+未修改：`Phase1Ecc.cpp`、`Bank.*`、`Phase1Reports.*`、任何 C++ 源码/测试、`configs/suite_paper.yaml`、`configs/generated/paper*`、`runs/paper/`、`results/g8/`、`figures/`、`artifact/`、`environment/source_g1..g8.patch`。
+
+### 2. 环境恢复
+
+G10 开始时 `.venv/bin/python` 不存在，系统也没有 `python3`、`scons`、`libgtest-dev`。第一次 `apt-get install` 因 security 源索引过期返回 100（python3.10 包 404）；执行 `apt-get update` 后重装成功。
+
+```bash
+DEBIAN_FRONTEND=noninteractive apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+  python3 python3-venv python3-pip scons libgtest-dev
+# update exit 0, install exit 0; logs/g10_apt_install.log
+
+python3 -m venv .venv
+.venv/bin/python -m pip install --no-cache-dir -r environment/requirements.lock.txt
+# pip exit 0（第一次安装被用户中断，重跑后完成）
+.venv/bin/python -c "import numpy, pandas, yaml, matplotlib, jsonschema, pytest"
+# exit 0
+.venv/bin/python -m pip check
+# exit 0: No broken requirements found.
+.venv/bin/python -m pip freeze > /tmp/g10_pip_freeze.txt
+diff -u environment/requirements.lock.txt /tmp/g10_pip_freeze.txt
+# exit 0: 无差异
+```
+
+实际版本：Python 3.10.12、scons 4.0.1、libgtest 1.11.0、numpy 2.2.6、pandas 2.3.3、matplotlib 3.10.9、PyYAML 6.0.3、jsonschema 4.26.0、pytest 9.2.0。与 `environment/requirements.lock.txt` 完全一致。
+
+### 3. 固定上游 git 元数据恢复
+
+上传步骤曾按用户确认删除 `simulator/.git`。G10 环境检查发现 `git -C simulator rev-parse HEAD` 会穿透到外层仓库（返回 `8a595b2...`），导致 `scripts/build.sh` 的固定提交检查失败。
+
+处置：用 GitHub API 读取固定提交的 commit/tree 元数据，用 `raw.githubusercontent.com` 下载 94 个 blob；对每个 blob 写入 `git hash-object -w` 后核对哈希；用 `git mktree` 自底向上重建 17 个 subtree 与 root tree；重建 commit 对象并核对 SHA1 等于 `3703d1f19c8f027360cc33a3243eb271e3bb6898`。最终：
+
+```text
+HEAD=3703d1f19c8f027360cc33a3243eb271e3bb6898
+tree=7ac34faf86579aca00f5b357c61b5550d1dff7e7
+git status --porcelain = 39 行（与删除 .git 前的修改/未跟踪状态一致）
+```
+
+该过程只写入 `simulator/.git` 对象，不覆盖工作区源文件。重建设脚本保存在 `/tmp/opencode/reconstruct_pim_git.py`（不在交付目录），日志：`logs/g10_git_restore.log`。
+
+### 4. 构建
+
+```bash
+bash scripts/build.sh
+# exit 0
+# binary sha256=ab2165c02c6cb81283b8c40e36ce92e39ec809503fc75517423b11fce1607082
+# 与 G8 记录一致；BUILD_OK, EXIT_CODE=0
+```
+
+日志：`logs/build_20261116T100819Z.log`。
+
+### 5. 冻结哈希
+
+在改脚本/跑回归之前记录 `results/regression_g10/frozen_sha256.txt`：
+
+- 覆盖 `runs/paper/`、`results/g1..g8/`、`results/figure_data/`、`figures/`、`configs/generated/paper/`、`configs/generated/paper-manifest.json`、`configs/suite_paper.yaml`、`artifact/`、`results/statistics.csv/json`、`results/run_metrics.csv`、`summary.csv`、`failure_cases.csv`、`validation_summary.json`、`environment/source_g1..g8.patch`。
+- 共 33,868 个文件。
+- 工作区实际不存在 `environment/source_g0.patch`（G0 没有源码改动；原冻结清单写的是 g0..g8）。文件头部如实记录该缺失，没有创建空文件或伪造哈希。
+- 第一次串行哈希在 600 s 超时（共享文件系统较慢）；改用 `xargs -P 16` 后 6 s 完成。G10 结束时用 16 线程复核：33,868/33,868 一致。
+
+### 6. 回归 manifest
+
+```bash
+.venv/bin/python scripts/make_regression_manifest.py
+# 第一次 exit 1：P1-C profile 位于 params 而非 case，筛选为 0
+# 修正筛选后 exit 0
+```
+
+选择与数量：
+
+```text
+P1-A                     144
+P1-C seed==0 LOCAL_VISIBLE 60
+P1-E positive seed==0      2
+P1-F Cost seed==0         16
+P1-F Robustness           18
+total                    240
+```
+
+只改 `params.output_dir` 和 `case.out` 到 `runs/regression_g10/<run_id>`，其他字段原样复制。输出：`configs/generated/regression_g10-manifest.json`。
+
+`scripts/run_suite.py` 增加：
+
+- `--results-dir`，默认 `results/g8`；
+- `--runs-dir`，默认 `runs/paper`（补充参数，避免回归运行时覆盖冻结的 `runs/paper/run_manifest.json`；默认行为不变）。
+
+### 7. 回归执行与比较
+
+```bash
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/regression_g10-manifest.json \
+  --results-dir results/regression_g10 \
+  --runs-dir runs/regression_g10 \
+  --jobs 8
+# exit 0；240/240 SUCCESS；8/8 runner checks PASS
+# 日志 logs/g10_regression_run.log
+
+.venv/bin/python scripts/compare_regression.py
+# exit 0；REGRESSION=PASS；compare.csv 仅 header（0 差异）
+```
+
+比较口径：`metrics.json` 忽略 `wall_seconds`、`paired_ext_off_wall_seconds`、`wall_overhead_fraction` 和任何 `_utc` 键后逐键相等；`output.bin`、`reports.csv` 两边存在性一致且 SHA256 相等。
+
+结果：
+
+```text
+manifest_total=240 executed=240
+SUCCESS=240 FAIL=0 TIMEOUT=0 EXPECTED_NEGATIVE=0
+REGRESSION=PASS
+frozen_verified=33868/33868
+```
+
+### 8. 预注册协议
+
+`docs/g10_supplement_protocol.md` 按补充手册 §4、§5 整理 P1-G/P1-H 的位模式、G11/G12 要求、结果分类、矩阵、统计口径和 H-G1..H-G3、H-H1..H-H4；明确 scrub 与 codeword 粒度为 ASSUMED。文件 SHA256：
+
+```text
+8758ead33623453f9eea18cf7d8dd328a97eb19dc07470e9e8a39988ee3e8247  docs/g10_supplement_protocol.md
+```
+
+协议在 G14 后不得修改；偏离只能写入 `docs/g16_supplement_results.md`。
+
+### 9. 通过/失败检查
+
+通过：
+
+- Python 导入、pip check、freeze 与 lock 逐行一致；
+- build.sh 固定提交检查与构建，二进制与 G8 相同；
+- `.git` 重建的 commit/tree/blob 哈希全部核对；
+- 240/240 回归 SUCCESS；
+- 0 FAIL、0 TIMEOUT；
+- REGRESSION=PASS（0 差异）；
+- 33,868/33,868 冻结文件哈希一致。
+
+失败并已修正：
+
+1. 初次 `apt-get install` exit 100：security 源中 python3.10 包 404；`apt-get update` 后 exit 0。
+2. 初次 venv 安装被用户中断：重跑 `pip install -r` 后 exit 0。
+3. `make_regression_manifest.py` 初次 exit 1：P1-C profile 字段位置判断错误；改用 `params.profile` 后 exit 0。
+4. 初次串行 frozen hash 超时：改为 16 路并行后 6 s 完成。
+5. GitHub HTTPS fetch 不可用（TLS/连接超时）：改用 `api.github.com` + `raw.githubusercontent.com` 逐对象重建；所有对象哈希均与 GitHub 返回值核对。
+
+未发生：未删除测试、未修改预期、未更换位模式、未让 runtime 读取真值、未伪造数据、未把未执行命令写成已完成。
+
+### 10. 产物位置
+
+```text
+docs/g10_supplement_protocol.md
+configs/generated/regression_g10-manifest.json
+runs/regression_g10/<run_id>/
+results/regression_g10/run_metrics.csv
+results/regression_g10/summary.csv
+results/regression_g10/validation.json
+results/regression_g10/compare.csv
+results/regression_g10/compare_summary.txt
+results/regression_g10/frozen_sha256.txt
+logs/g10_*.log
+```
+
+### 11. 下一关唯一任务
+
+**G11：ECC 漏检位模式验证（Python + C++）。** 按补充手册 §4.1/§4.2，只新增 `tests/test_ecc_reference.py::test_escape_patterns` 和 `simulator/src/tests/Phase1EccTestCases.cpp::TEST(Phase1Ecc, EscapePatterns)`，运行 Python 与 C++ ECC 测试；不得修改 `Phase1Ecc.cpp`，不得更换位模式，不实现 fixture、scrub、codeword 粒度或矩阵。
+
+## G11 — ECC 漏检位模式验证
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §4.1/§4.2。工作目录：`pim-phase1/`。
+
+### 1. 实际改动的文件
+
+修改/新增测试：
+
+```text
+tests/test_ecc_reference.py                       # 新增 test_escape_patterns（8 个 PATTERNS 参数化）
+simulator/src/tests/Phase1EccTestCases.cpp        # 新增 TEST(Phase1Ecc, EscapePatterns)
+```
+
+未修改：
+
+```text
+simulator/src/Phase1Ecc.cpp                       # SHA256 2e5f9fa3c688a295a8091818c3b7b8cf4b7cb0a8d96512d29b8ddc8804c444a7
+simulator/src/Phase1Ecc.h
+任何 runtime / storage / reports 代码
+```
+
+构建脚本重写（非冻结文件）：
+
+```text
+environment/binary.json
+environment/binary.sha256
+environment/build_flags.txt
+runs/baseline/binary.json
+runs/baseline/binary.sha256
+logs/build_20261116T101343Z.log
+```
+
+G11 未生成独立的 `environment/source_g11.patch`，也未更新累计 `environment/source.patch`；按补充手册 §9，G16 才生成 `environment/source_g16.patch` 并统一更新累计补丁。当前累计补丁仍为 G8 的 `93daf08c...`。
+
+### 2. Python 验证
+
+新增 `test_escape_patterns` 使用 `tests/test_ecc_reference.py` 已有的独立 72-bit 参考实现（`encode`/`decode`/`codeword`/`from_codeword`），不逐行翻译 C++。对 `PATTERNS` 的 8 个数据字逐一验证：
+
+- F1：数据位 {15} → `CORRECTED`，返回原值，syndrome=21，overall=1；
+- F3M：数据位 {0,1,4} → `CORRECTED`，返回原值⊕{0,1,4,10}，syndrome=15，overall=1；
+- F4S：数据位 {0,1,4,10} → `CLEAN`，返回同一坏值，syndrome=0，overall=0；
+- S4 第二位：{15} 后翻 {14} → `UNCORRECTABLE`，syndrome=1，overall=0；
+- cw1：断言 `79//64==1`、`79%64==15`，单比特 → `CORRECTED`，返回原值。
+
+同时断言数据位→codeword 位置映射：0→3、1→5、4→9、10→15、14→20、15→21；并显式断言 F3M 的 corrected data 与 F4S 的返回数据逐值相同。
+
+```bash
+.venv/bin/python -m pytest tests/test_ecc_reference.py -q
+# exit 0
+# 25 passed in 1.79s
+```
+
+日志：`logs/g11_ecc_python.log`（含原有 clean/single/double/crosscheck 测试）。
+
+### 3. C++ 验证
+
+新增 `TEST(Phase1Ecc, EscapePatterns)`，使用 `Phase1Ecc::encodeParity/decode`、`dataBitPositions()`、`hammingParityPositions()` 和文件已有的 `codewordFrom`/`fromCodeword` 辅助函数，对同一组 8 个 `patterns()` 逐一断言：
+
+- F1、F3M、F4S、S4、cw1 的状态、返回数据、syndrome、overall parity；
+- F3M 与 F4S 返回数据相同；
+- 数据位→位置映射与 `bitInBurst=79` 的 codeword 1 / data bit 15 解释。
+
+```bash
+bash scripts/build.sh
+# exit 0；新二进制 SHA256 493335a136c533cda34c7054f30ba7f1e9b2f4b1ea9126e0a40bec0f4e342f99
+cd simulator
+./sim --gtest_filter='Phase1Ecc.*'
+# exit 0
+# [==========] 2 tests from 1 test suite ran.
+# [  PASSED  ] 2 tests.
+```
+
+日志：`logs/g11_build.log`、`logs/g11_ecc_cpp.log`。`Phase1Ecc.ExhaustiveSingleAndDoubleBit` 仍为 17 ms 通过，未删除或放宽既有测试。
+
+### 4. 通过/失败检查
+
+通过：
+
+- Python：25 passed；新增 8 个 escape pattern 全部符合 §4.1；
+- C++：`Phase1Ecc.*` 2/2 通过；`EscapePatterns` 0 ms；
+- F3M 与 F4S 坏数据完全相同；
+- S4 为 UE；
+- cw1 映射正确；
+- `Phase1Ecc.cpp` 未修改；
+- 构建 exit 0。
+
+失败：无。
+
+未发生：未修改 ECC 实现、未更换位模式、未删除测试、未修改预期、未伪造数据、未执行 G12 或后续关卡。
+
+### 5. 产物位置
+
+```text
+tests/test_ecc_reference.py
+simulator/src/tests/Phase1EccTestCases.cpp
+logs/g11_ecc_python.log
+logs/g11_ecc_cpp.log
+logs/g11_build.log
+environment/binary.sha256
+```
+
+### 6. 下一关唯一任务
+
+**G12：P1-G fixture + smoke。** 按补充手册 §4.3/§4.4，复制 `Phase1G8P1CTestCases.cpp` 为 `Phase1G10EscapeTestCases.cpp`，实现 F3M/F4S/F1W_F4S 注入、只读评估器、`escape_outcome` 分类和 `contract_pass`；运行 24 个 smoke cases 并全部 contract_pass。不得实现 scrub、codeword 粒度、完整 4320 矩阵或 P1-H。
+
+## G12 — P1-G fixture 与 24-case smoke
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §4.3/§4.4。工作目录：`pim-phase1/`。
+
+进入 G12 前复核 G10/G11：G10 的 33,868 个冻结文件全部哈希一致，240-case 回归 `REGRESSION=PASS`；G11 的 Python 25 passed、C++ `Phase1Ecc.*` 2/2 passed；G11 的 `Phase1Ecc.cpp` 仍为 `2e5f9fa3...`。复核通过后才修改 G12 fixture。
+
+### 1. 实际改动的文件
+
+新增：
+
+```text
+simulator/src/tests/Phase1G10EscapeTestCases.cpp   # TEST(Phase1G10EscapeFixture, RunCase)
+runs/supplement/g12_smoke/manifest.json
+runs/supplement/g12_smoke/<24 run_id>/
+results/supplement/g12_smoke_summary.json
+results/supplement/g12_smoke_run_metrics.csv
+logs/g12_build.log
+logs/g12_smoke.log
+logs/g12_validate.log
+```
+
+修改：
+
+```text
+docs/STATUS.md
+docs/implementation_log.md
+```
+
+构建脚本重写（非冻结文件）：
+
+```text
+environment/binary.json
+environment/binary.sha256
+environment/build_flags.txt
+runs/baseline/binary.json
+runs/baseline/binary.sha256
+logs/build_20261116T101846Z.log   # 首次失败（文件截断）
+logs/build_20261116T101906Z.log
+logs/build_20261116T101953Z.log
+logs/build_20261116T102019Z.log   # 最终成功
+```
+
+未修改：`Phase1Ecc.cpp`（仍 `2e5f9fa3...`）、`Bank.*`、`Phase1Reports.*`、既有 P1-C fixture、paper 运行与冻结文件。
+
+G12 未生成独立补丁快照；累计 `environment/source.patch` 仍为 G8 的 `93daf08c...`，按补充手册 §9 在 G16 统一更新。
+
+### 2. fixture 实现
+
+`Phase1G10EscapeTestCases.cpp` 从 P1-C fixture 复制，保留 preload → 注入 → `executeEltwise` ADD → `runProducer` → hold → consumer 主流程，新增：
+
+- 参数：`fault_kind ∈ {F3M,F4S,F1W_F4S}`、`escape_placement ∈ {NONE,SAME_BANK,DIFF_BANK}`、`target_burst`；F3M/F4S 强制 NONE，F1W 强制 SAME/DIFF；
+- F3M：target burst 翻 {0,1,4}；
+- F4S：target burst 翻 {0,1,4,10}；
+- F1W_F4S：target burst 翻 witness {15}；从 `target_burst+1` 起逐个递增取第一个满足 bank 条件的 `corrupt_burst`（回绕到 0），翻 {0,1,4,10}；断言 `corrupt_burst != witness_burst`；
+- 每次注入写一行 INJECTION 到 `truth.csv`，含 `storage_key`、`bit_positions`、`raw_before/raw_after`、`target_access_id=A_burst_<b>`、实际 `decoder_status`；
+- 测试专用 `RecordingSink` 转发检测到 `Phase1Reports`，用于验证 F1W 的 corrupt_burst 不产生检测事件；runtime 不持有 truth/golden/注入位置引用；
+- 只读评估器：
+  - `corruption_propagates`：A′ = A⊕{0,1,4,10}，重算 B′=A′+X、C′=2·B′，与无故障期望逐字节比较；
+  - `held_output_corrupt`：仅未发布时，从 `codec.encode({0,0,0,256,0}) + corrupt_burst*32` 解码 B 位置，读取 4 个 codeword 的 raw data 拼 32 B 与 `expectedB[corrupt_burst]` 比较；任一 key 不存在为 null；
+  - `report_region_ids`、`report_covers_corrupt_bank`：bank 粒度公式照抄 `Phase1Reports.cpp`（`channel*num_banks + actual_bank`）；
+- `escape_outcome` 按 §4.3 顺序判定；`contract_pass` 按 §4.3 全部条件；
+- metrics 保留 P1-C 字段，新增 `fault_kind, escape_placement, witness_burst, corrupt_burst, witness_bank, corrupt_bank, corruption_propagates, held_output_corrupt, escape_outcome, report_region_ids, report_covers_corrupt_bank, internal_ce, internal_ue`；其中 `held_output_corrupt` 输出 true/false/null。
+
+### 3. smoke 生成与执行
+
+smoke 参数：n_tiles=1、consumer=HOST、profile=LOCAL_VISIBLE、seed=0..2、四种 fault 配置（F3M/NONE、F4S/NONE、F1W/SAME_BANK、F1W/DIFF_BANK）、D/T_ref∈{0,1}、H/T_ref=0、T_ref=731、L=8、I=1、Q=64、watchdog=400000。目标 burst 用 `target_burst_for(seed,1)`：seed 0→35、1→62、2→121。
+
+临时 smoke runner（`/tmp/opencode/run_g12_smoke.py`，非交付脚本；G14 由 `expand_supplement.py`/`run_suite.py` 正式化）生成 24 个 params.ini，逐 case 独立进程运行：
+
+```bash
+.venv/bin/python /tmp/opencode/run_g12_smoke.py
+# exit 0；G12_SMOKE=PASS pass=24/24
+```
+
+结果：
+
+```text
+contract_pass=24/24
+PREVENTED=8  CORRUPT_CONSUMED=14  MASKED=2
+UNCLASSIFIED=0  INVALID_CASE=0  TIMEOUT=0
+```
+
+分组：
+
+- F3M：D=0 的 3 个全部 PREVENTED（held_output_corrupt=true）；D=731 的 3 个全部 CORRUPT_CONSUMED；truth decoder_status=CORRECTED。
+- F4S：6/6 CORRUPT_CONSUMED；detected_events=0、delivered_reports=0、internal_ue=0；truth decoder_status=CLEAN。
+- F1W_F4S：5 PREVENTED、5 CORRUPT_CONSUMED、2 MASKED；witness 均产生 CE，corrupt_burst 无检测；SAME_BANK 的 `report_covers_corrupt_bank=true`，DIFF_BANK 全为 false。
+- smoke 中 seed=1 的 SAME_BANK 选择 corrupt_burst=78，DIFF_BANK 选择 63；不同 A 值导致前者被 FP16 舍入掩蔽，后者传播。因此 H-G3 的“SAME/DIFF 结果相同”在 smoke 子集内未完全复现；这是预注册假设的观察，未调参，完整判定留给 G14/G16。
+
+### 4. 独立复核
+
+`logs/g12_validate.log` 从保存文件重新计算，不依赖 fixture 结论：
+
+```text
+G12_INDEPENDENT PASS bad=0
+```
+
+检查项：reports 行数 = delivered_reports；truth 注入行数（F3M/F4S=1、F1W=2）；published 时 held_output_corrupt=null；PREVENTED 条件；CORRUPT_CONSUMED 条件；MASKED 条件；F4S 无报告/无 UE；report_region_ids 与 reports.csv 一致；F3M/F4S/F1W truth decoder_status；DIFF_BANK 不覆盖 corrupt bank。
+
+### 5. 命令与退出码
+
+```bash
+bash scripts/build.sh
+# 第一次 exit 2：新文件截断在 runConsumer 内部（拼装错误）
+# 修正后 exit 0；最终二进制 SHA256 1c2d3fc69e2bf89330bc71155421d182c9fa059b8b482fe9452233e4d9108aea
+
+.venv/bin/python /tmp/opencode/run_g12_smoke.py
+# 第一次 exit 1：18/24，F3M 全部 INVALID_CASE
+# 修正后 exit 0：24/24
+
+.venv/bin/python - <<'PY' ...独立复核...
+# exit 0
+```
+
+### 6. 失败与修正
+
+1. 初始文件拼装用 `head -n 190`，截断在 `runConsumer` 的 `while` 内，`TEST` 被当作局部类，build exit 2。修正为保留完整 `runConsumer` 后再接新 helper/test；build exit 0。
+2. F3M 首轮全部 `INVALID_CASE`：评估器把原始注入掩码当成解码后数据掩码。F3M 的 raw 翻位是 {0,1,4}（0x13），解码器再翻 data bit 10，得到坏数据掩码 {0,1,4,10}（0x413）。修正为 `kEscapeRawMask`（raw）与 `kEscapeMask`（decoded data）分开；重跑 24/24。
+3. `held_output_corrupt` 初版写 1/0，独立复核按布尔检查失败；改为 true/false/null 后重新构建与重跑，独立复核 0 不一致。
+4. 未修改 ECC 实现、未更换位模式、未修改预期、未删除测试、未让 runtime 读取 truth。
+
+### 7. 产物位置
+
+```text
+simulator/src/tests/Phase1G10EscapeTestCases.cpp
+runs/supplement/g12_smoke/manifest.json
+runs/supplement/g12_smoke/<run_id>/{params.ini,config.json,truth.csv,reports.csv,metrics.json,output.bin,stdout.log,stderr.log,exit_code}
+results/supplement/g12_smoke_summary.json
+results/supplement/g12_smoke_run_metrics.csv
+logs/g12_build.log
+logs/g12_smoke.log
+logs/g12_validate.log
+environment/binary.sha256
+```
+
+### 8. 下一关唯一任务
+
+**G13：scrub/codeword 接口 + P1-H smoke + 回归。** 按补充手册 §5.1–§5.3，在 `Bank` 增加默认关闭的理想化 scrub 开关与计数，在 `Phase1Reports` 增加 codeword 粒度（ASSUMED，公式写入注释/协议），新建 `Phase1G11SequenceTestCases.cpp` 实现 S1–S6/P/Q/R/scrub，运行 seed=0 的 33 个 P1-H smoke，并在改代码后立即跑 G10 regression 流程，必须 `REGRESSION=PASS`。不得提前实现 G14 全矩阵、聚合、图或报告。
+
+## G13 — scrub/codeword 接口、P1-H smoke 与回归
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §5.1–§5.3。工作目录：`pim-phase1/`。
+
+### 1. 实际改动的文件
+
+C++：
+
+```text
+simulator/src/Bank.h
+simulator/src/Bank.cpp
+simulator/src/Phase1Reports.cpp
+simulator/src/tests/Phase1G11SequenceTestCases.cpp   # 新增 TEST(Phase1G11SequenceFixture, RunCase)
+```
+
+脚本（新增可选参数，默认行为不变）：
+
+```text
+scripts/make_regression_manifest.py   # --out-manifest / --run-root
+scripts/compare_regression.py         # --manifest / --out-dir
+```
+
+文档/协议：
+
+```text
+docs/g10_supplement_protocol.md       # 追加 codeword region_id 公式（ASSUMED）
+docs/STATUS.md
+docs/implementation_log.md
+```
+
+新增产物：
+
+```text
+configs/generated/regression_g13-manifest.json
+runs/regression_g13/<240 run_id>/
+results/regression_g13/{run_metrics.csv,summary.csv,validation.json,compare.csv,compare_summary.txt}
+runs/supplement/g13_smoke/manifest.json
+runs/supplement/g13_smoke/<33 run_id>/
+results/supplement/g13_smoke_summary.json
+results/supplement/g13_smoke_run_metrics.csv
+logs/g13_build.log
+logs/g13_smoke.log
+logs/g13_validate.log
+logs/g13_regression_run.log
+logs/g13_regression_compare.log
+```
+
+构建脚本重写（非冻结文件）：
+
+```text
+environment/binary.json
+environment/binary.sha256
+environment/build_flags.txt
+runs/baseline/binary.json
+runs/baseline/binary.sha256
+logs/build_20261116T102517Z.log
+logs/build_20261116T102600Z.log
+```
+
+未修改：`Phase1Ecc.*`、P1-C/P1-G fixture、paper 运行/结果/图/artifact；`environment/source.patch` 仍为 `93daf08c...`，G16 统一更新。
+
+### 2. scrub 实现（ASSUMED）
+
+`Bank` 新增：
+
+```text
+void setPhase1Scrub(bool enabled);
+uint64_t phase1ScrubWrites() const;
+```
+
+成员默认 `false`、计数 0。`Bank::read` 的受保护 ECC 路径中，仅当：
+
+```text
+result.status == CORRECTED && phase1Scrub_ == true
+```
+
+调用 `phase1Storage_.writeLegal(key, result.data)` 并递增计数。该写是模型内直接 codeword 重写，不产生总线事务、不增加周期；开关为 false 时不写、不计数，默认输出/报告/周期不变。
+
+### 3. codeword 粒度（ASSUMED）
+
+`Phase1Reports` 构造函数接受 `"codeword"`；bank/page 分支保持原样。codeword 分支：
+
+```text
+region_type = "codeword"
+region_id = (((channel * num_banks + actual_bank) * num_rows + row)
+             * burst_columns + burst_column) * 4 + codeword_index
+```
+
+公式写入 `Phase1Reports.cpp` 注释和 `docs/g10_supplement_protocol.md`。该接口只定义模型公开报告标识，不提供位位置或 syndrome，不代表真实 HBM 报告格式。
+
+### 4. P1-H fixture
+
+`Phase1G11SequenceTestCases.cpp` 只用主机读写路径，复用 G4 的 `memory.addTransaction`/`addBarrier` 写法：
+
+- P=(bank_p,row 0,col 0)、Q=(bank_p,row 1,col 0)、R=(bank_r,row 0,col 0)；codec encode/decode round-trip 断言；
+- 三位置先合法写入确定性 4-codeword 模式；
+- 4 rounds，每轮先执行预定注入，再按 P、Q、R 固定顺序各读一次，每次读到 idle 且报告队列清空；
+- S1–S6 注入表严格按 §5.2；S6 仅 scrub=1，r1 注入前断言 P 的 cw0 data bit 15 已恢复为初始值；
+- 测试专用 `RecordingSink` 转发 detection 到 `Phase1Reports`；runtime 不存在，报告只来自真实检测；
+- `truth.csv` 写 INJECTION 与 DETECTION 行；`reports.csv` 只含公开字段；`metrics.json` 含 scenario/granularity/scrub/seed/bank_p/bank_r/rounds/injections/detected_events/delivered_reports/internal_ce/internal_ue/scrub_writes/report_signature/contract_pass/timeout；
+- `report_signature` 按 report_seq 连接 `error_class:region_id`，不含 report_cycle。
+
+### 5. smoke 参数与结果
+
+seed=0；`bank_p=13`、`bank_r=7`（PCG64(0)：`rng.integers(0,16)=13`，`(13+1+rng.integers(0,15))%16=7`）。33 cases = 3 粒度 ×（S1–S5 各 scrub=0/1 + S6 scrub=1）。
+
+```bash
+.venv/bin/python /tmp/opencode/run_g13_smoke.py
+# 第一次 exit 1：27/33，S1_SINGLE 被错误要求 2 次注入
+# 修正 S1 期望注入数为 1 后 exit 0；G13_SMOKE=PASS pass=33/33
+```
+
+结果：
+
+```text
+contract_pass=33/33
+注入数：S1=1，S2–S6=2
+scrub_writes：scrub=0 全 0；scrub=1 时 S1=1，S2–S6=2
+```
+
+独立复核（`logs/g13_validate.log`）：reports/truth 行数、report_signature、scrub_writes、bank/codeword region_id 公式全部一致，`G13_INDEPENDENT PASS bad=0`。
+
+### 6. smoke 观察（不是完整统计）
+
+- bank、scrub=1：S2/S3/S4/S6 的 signature 均为 `CE:13;CE:13`；在 smoke 子集内支持 H-H1。
+- codeword、scrub=1：S4/S6 均为 `CE:27262976;CE:27262976`；S2 为 `CE:27262976;CE:27262977`，S3 为 `CE:27262976;CE:27263104`；支持 H-H2。
+- scrub=0：S4 在 bank/page/codeword 三种粒度均出现 UE；支持 H-H3。
+- bank、scrub=1：S2/S3/S4/S6 都有同一 region 收到 2 份 CE，CoF 式规则同样触发；S1 只有 1 份，S5 为两个不同 region；支持 H-H4。
+- 以上仅 seed 0 smoke；完整 10-seed 判定留给 G14/G15。
+
+### 7. 回归
+
+为保留 G10 改代码前证据，G13 使用独立 manifest/目录，不覆盖 G10：
+
+```bash
+.venv/bin/python scripts/make_regression_manifest.py \
+  --out-manifest configs/generated/regression_g13-manifest.json \
+  --run-root runs/regression_g13
+# exit 0；240 cases
+
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --results-dir results/regression_g13 \
+  --runs-dir runs/regression_g13 --jobs 8
+# exit 0；240/240 SUCCESS；8/8 checks
+
+.venv/bin/python scripts/compare_regression.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --out-dir results/regression_g13
+# exit 0；REGRESSION=PASS；compare.csv 仅 header
+```
+
+默认参数未变：不带参数时 `make_regression_manifest.py`/`compare_regression.py` 仍指向 G10；G10 的 240-case 结果与冻结文件未被覆盖。G10 冻结哈希复核 33,868/33,868 一致。
+
+### 8. 命令与退出码
+
+```bash
+bash scripts/build.sh
+# 最终 exit 0；二进制 SHA256 1662ad0522736cdf0bedb5eeeb58c5029efbf128c64dd5112187b748a5c2cda1
+
+.venv/bin/python /tmp/opencode/run_g13_smoke.py
+# 第一次 exit 1（27/33）；修正后 exit 0（33/33）
+
+.venv/bin/python -m py_compile scripts/make_regression_manifest.py scripts/compare_regression.py scripts/run_suite.py
+# exit 0
+
+.venv/bin/python scripts/make_regression_manifest.py --out-manifest ... --run-root runs/regression_g13
+# exit 0
+.venv/bin/python scripts/run_suite.py --manifest ... --results-dir results/regression_g13 --runs-dir runs/regression_g13 --jobs 8
+# exit 0
+.venv/bin/python scripts/compare_regression.py --manifest ... --out-dir results/regression_g13
+# exit 0；REGRESSION=PASS
+```
+
+### 9. 失败与修正
+
+1. 首次 G13 smoke 27/33：S1_SINGLE 只调度 1 次注入，fixture 与 smoke runner 都错误要求 2 次。修正为 S1=1、其余=2；重跑 33/33。
+2. truth INJECTION 行在初版中多了一个逗号（decoder_status 列错位）；在首次构建前已修正为与 P1-C 相同的 14 列。
+3. 未修改 ECC、未放宽 contract、未更换位模式、未伪造报告。
+
+### 10. 产物位置
+
+```text
+simulator/src/Bank.h, simulator/src/Bank.cpp
+simulator/src/Phase1Reports.cpp
+simulator/src/tests/Phase1G11SequenceTestCases.cpp
+docs/g10_supplement_protocol.md
+runs/supplement/g13_smoke/manifest.json
+runs/supplement/g13_smoke/<run_id>/
+results/supplement/g13_smoke_summary.json
+results/supplement/g13_smoke_run_metrics.csv
+configs/generated/regression_g13-manifest.json
+runs/regression_g13/<run_id>/
+results/regression_g13/
+logs/g13_*.log
+logs/build_20261116T102517Z.log
+logs/build_20261116T102600Z.log
+```
+
+### 11. 下一关唯一任务
+
+**G14：展开并运行补充矩阵。** 新建 `configs/suite_supplement.yaml`、`scripts/expand_supplement.py`，在 `scripts/run_suite.py::validate_case` 增加 `validate_p1g`/`validate_p1h`，运行全量 P1-G 4320 + P1-H 330（smoke 24/33），manifest 对账必须满足总数 = SUCCESS + FAIL + TIMEOUT + MISSING；失败单列不删除。G14 不实现聚合、图或报告修改。
+
+## G14 — 补充矩阵展开与完整执行
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §4.4/§5.3/§6。工作目录：`pim-phase1/`。
+
+### 1. 实际改动的文件
+
+新增：
+
+```text
+configs/suite_supplement.yaml
+scripts/expand_supplement.py
+configs/generated/supplement-manifest.json
+configs/generated/supplement-index.csv
+configs/generated/supplement/<4650 run_id>/config.json
+runs/supplement/<4650 run_id>/
+results/supplement/run_metrics.csv
+results/supplement/summary.csv
+results/supplement/validation.json
+results/supplement/failure_cases.csv
+logs/g14_expand.log
+logs/g14_run_full.log
+logs/g14_validate.log
+```
+
+修改：
+
+```text
+scripts/run_suite.py                  # 新增 validate_p1g / validate_p1h 与 P1-G/P1-H 分支
+docs/STATUS.md
+docs/implementation_log.md
+```
+
+未修改：任何 C++ 源码/测试、paper 运行/结果/图/artifact、冻结文件。G14 的二进制仍为 G13 的 `1662ad05...`；`environment/source.patch` 仍为 `93daf08c...`，G16 统一更新。
+
+### 2. suite 与 expander
+
+`configs/suite_supplement.yaml`：
+
+- P1G：profile LOCAL_VISIBLE、粒度 bank、n_tiles 1/8、consumer HOST/PIM、seed 0..29、四种 fault 配置、D/T_ref 0/0.5/1、H/T_ref 0/0.25/1、L=8、I=1、Q=64、watchdog=400000；
+- P1H：seed 0..9、granularity bank/page/codeword、S1–S6、S6 仅 scrub=1、rounds=4、D=0、I=1、Q=64、watchdog=200000；
+- 顶层 `smoke: false`；`--smoke` 覆盖为 P1-G 24、P1-H 33。
+
+`scripts/expand_supplement.py` 使用 `target_burst_for`、`base_params` 和与 paper 相同的 hash-addressed `add_case`，但 `RUN_ROOT=runs/supplement`、`CONFIG_ROOT=configs/generated/supplement`、manifest 写 `configs/generated/supplement-manifest.json`。对未知/缺失 key 报错。
+
+```bash
+.venv/bin/python scripts/expand_supplement.py --suite configs/suite_supplement.yaml
+# exit 0
+# expanded 4650 cases (full)
+# P1-G Escape 4320; P1-H Sequence 330
+# G14_EXPAND=PASS
+
+.venv/bin/python scripts/expand_supplement.py --suite configs/suite_supplement.yaml --smoke
+# exit 0; 24 + 33 = 57
+```
+
+全量 manifest：`expected_total=4650`，4650 个唯一 run_id；SHA256 `781e560ef5965a7e8d1ebf377525e39aaa23b9491ab1b229b434de03abc47d63`。
+
+### 3. run_suite 验证分支
+
+`scripts/run_suite.py` 新增：
+
+- `validate_p1g`：读 truth/reports/metrics，检查注入数（F3M/F4S=1、F1W=2）、report 行数、delivered/detected、internal_ue、`report_region_ids`、`report_covers_corrupt_bank`、published/consumed、output_changed、held_output、output.bin 大小；按 fault 检查 F3M truth decoder=CORRECTED、F4S CLEAN 且 0 报告/检测、F1W witness CORRECTED + corrupt CLEAN 且 burst 不同；从 published/consumed/output_changed/corruption_propagates/lock/held 复算 `escape_outcome`；
+- `validate_p1h`：读 truth/reports/metrics，检查注入数（S1=1、其余=2）、detection/report 行数、delivered=detected、internal_ce+ue=detected、report_signature、region_type、bank/codeword region_id 公式、scrub_writes（scrub=0 全 0；scrub=1 时 S1=1、其余=2）、rounds=4、S6 scrub=1。
+
+未改其他 group 的验证逻辑；默认路径仍为 G8 paper 行为。
+
+### 4. 全量运行
+
+```bash
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/supplement-manifest.json \
+  --results-dir results/supplement \
+  --runs-dir runs/supplement \
+  --jobs 8 --resume
+# exit 0
+# 4650/4650 SUCCESS；8/8 runner checks PASS
+```
+
+日志：`logs/g14_run_full.log`；运行区间 2026-11-16T10:34:39Z–10:37:16Z。
+
+对账：
+
+```text
+manifest_total = 4650
+SUCCESS = 4650
+EXPECTED_NEGATIVE = 0
+FAIL = 0
+TIMEOUT = 0
+MISSING = 0
+P1-G Escape: 4320/4320 contract_pass
+P1-H Sequence: 330/330 contract_pass
+```
+
+`results/supplement/failure_cases.csv` 只有表头，未删除任何 case。
+
+### 5. 独立复核
+
+`/tmp/opencode/validate_g14.py` 逐 case 重新调用 `validate_p1g`/`validate_p1h`：
+
+```text
+manifest_total=4650 groups={'P1-G Escape': 4320, 'P1-H Sequence': 330}
+missing=0 failed=0
+runner_validation=True counts={'SUCCESS': 4650, ...}
+checks_failed={}
+G14_VALIDATE=PASS
+```
+
+日志：`logs/g14_validate.log`。
+
+### 6. 结果分布（仅对账摘要，不做 G15 统计）
+
+P1-G 4320：
+
+```text
+PREVENTED=2166  CORRUPT_CONSUMED=1920  MASKED=234
+F3M   (1080): PREVENTED=706  CORRUPT_CONSUMED=302  MASKED=72
+F4S   (1080): CORRUPT_CONSUMED=1008  MASKED=72
+F1W   (2160): PREVENTED=1460 CORRUPT_CONSUMED=610  MASKED=90
+```
+
+P1-H 330：S1/S2/S3/S4/S5 各 60、S6 30（覆盖 3 粒度与 scrub 组合）。
+
+以上不是 G15 的置信区间或图数据；G15 才做分母、Wilson/bootstrap、不可区分对和 CoF 统计。
+
+### 7. 回归与冻结检查
+
+```bash
+.venv/bin/python scripts/compare_regression.py
+# exit 0；REGRESSION=PASS（G10 240 cases）
+.venv/bin/python scripts/compare_regression.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --out-dir results/regression_g13
+# exit 0；REGRESSION=PASS（G13 240 cases）
+```
+
+G10 冻结文件复核：33,868/33,868 一致。G14 没有修改 G10/G13 的回归目录内容（只读取）。
+
+### 8. 边界与说明
+
+- 全量补充矩阵是 4650 个独立进程/目录；运行器 metadata 的 `gate` 字段沿用 runner 的 G8 名称，本关以 supplement manifest、`results/supplement/validation.json` 和独立复核为准。
+- G14 未实现 `aggregate_supplement.py`、figure_data、统计表、图、captions 或报告修改；这些属于 G15/G16。
+- G14 未生成独立补丁快照；累计 `environment/source.patch` 仍为 G8 的 `93daf08c...`，G16 统一生成 `source_g16.patch` 并更新。
+- 全量运行没有失败/超时/缺失；不能把“0 失败”写成对真实 HBM 的零漏报保证。
+
+### 9. 产物位置
+
+```text
+configs/suite_supplement.yaml
+configs/generated/supplement-manifest.json
+configs/generated/supplement/<run_id>/config.json
+runs/supplement/<run_id>/
+results/supplement/run_metrics.csv
+results/supplement/summary.csv
+results/supplement/validation.json
+results/supplement/failure_cases.csv
+logs/g14_expand.log
+logs/g14_run_full.log
+logs/g14_validate.log
+```
+
+### 10. 下一关唯一任务
+
+**G15：聚合、统计、作图。** 新建 `scripts/aggregate_supplement.py` 和 `scripts/plot_supplement.py`，生成 §6/§7 要求的 figure_data CSV、`statistics_supplement.csv`、Fig. 7/8/S2 与 plot manifest；执行 manifest 对账，失败单列；检查分母 n−MASKED、N/A、图例遮挡和灰度。G15 不修改报告、captions 或最终结论。
+
+## G15 — 补充实验聚合、统计与作图
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §6/§7。工作目录：`pim-phase1/`。
+
+### 1. 实际改动的文件
+
+新增：
+
+```text
+scripts/aggregate_supplement.py
+scripts/plot_supplement.py
+results/supplement/figure_data/fig7_escape.csv
+results/supplement/figure_data/fig8_signatures.csv
+results/supplement/figure_data/fig8_pairs.csv
+results/supplement/figure_data/fig8_cof_rule.csv
+results/supplement/statistics_supplement.csv
+results/supplement/reconciliation_supplement.json
+figures/fig07_escape_efficacy.{pdf,svg,png}
+figures/fig08_report_ambiguity.{pdf,svg,png}
+figures/figS2_escape_by_config.{pdf,svg,png}
+figures/gray/fig07_escape_efficacy.png
+figures/gray/fig08_report_ambiguity.png
+figures/gray/figS2_escape_by_config.png
+figures/plot_manifest_supplement.json
+logs/g15_aggregate.log
+logs/g15_plot.log
+logs/g15_validate.log
+```
+
+修改：
+
+```text
+docs/STATUS.md
+docs/implementation_log.md
+```
+
+未修改：任何 C++ 源码/测试、`report/phase1_results.md/.tex`、paper 数据/图/artifact、冻结文件。`figures/captions.md` 已追加三张补充图的条目（用户可读性要求）。二进制仍为 `1662ad05...`。
+
+### 2. 聚合与统计
+
+`scripts/aggregate_supplement.py` 只读 `runs/supplement` 的 metrics/reports 与 supplement manifest：
+
+```bash
+.venv/bin/python scripts/aggregate_supplement.py
+# exit 0
+# P1G rows=4320 P1H rows=330 stats=432
+# G15_AGGREGATE=PASS
+```
+
+输出：
+
+- `fig7_escape.csv`：4320 行；每 case 的 fault/placement/D/H、outcome、escape_outcome、corruption/held/published/consumed 等；
+- `fig8_signatures.csv`：330 行；含 `report_signature` 与 `report_signature_with_timing`（相对第一份报告的 cycle 差值）；
+- `fig8_pairs.csv`：90 行 = 3 粒度 × 2 scrub × 15 场景对；不可区分 seed 数、n_seeds、timing 不可区分数；scrub=0 的 S6 对为 N/A；
+- `fig8_cof_rule.csv`：36 行；每个 (granularity,scrub,scenario) 的 CoF fire seeds、UE seeds、n_seeds；
+- `statistics_supplement.csv`：432 行 = 144 格 × {PREVENTED_fraction, CORRUPT_CONSUMED_fraction, MASKED_fraction}；Wilson 95% CI；PREVENTED/CORRUPT 分母 `n−MASKED`，MASKED 分母 total；另列 `masked`、`total`；
+- F3M PREVENTED 行增加 `fig3_timely_fraction/n/low/high` 与 `prevented_minus_timely`；36 个 F3M 格子中 8 个与 fig3 同格 TIMELY 不一致（多为 MASKED 改变分母）；
+- `reconciliation_supplement.json`：manifest 4650 = 4320 + 330，missing=0，runner counts 4650 SUCCESS。
+
+### 3. 图
+
+`scripts/plot_supplement.py` 只读 `results/supplement/figure_data/*.csv`：
+
+```bash
+.venv/bin/python scripts/plot_supplement.py
+# exit 0
+# wrote 3 supplement figures
+# G15_PLOT=PASS
+```
+
+- Fig.7：1×4（F3M、F1W SAME、F1W DIFF、F4S），n_tiles=8 HOST；x=H/T_ref，y=D/T_ref（0 在上，1 在下）；颜色=CORRUPT_CONSUMED/(n−MASKED)，0–1 白→深红；面板副标题给出 `n'` 和 `M`；格内只显示 `C <count>` / `P <count>`，不再重复分母和每格 `m`；底部一行说明 C/P、n′ 及 F3M/F4S 同坏数据。
+- Fig. S2：4×4（n_tiles×consumer × fault）；只在最左列/最下行显示 tick labels，D/T_ref 为共享轴标题；每面板副标题给 `n'`/`M`，格内 C/P 计数；样本 4320。
+- Fig.8：2×3（scrub × granularity），只画非对角场景对；零值留空，对角省略，S6/scrub=0 斜线；颜色=不可区分 seed 比例，0 白→1 深蓝；仅 k>0 的格子标 `k/10`；S4* 加粗；底部一行说明 S4* 与 hatched 区域。
+- 三图输出 PDF/SVG/300 dpi PNG；灰度副本写入 `figures/gray/`。
+- `plot_manifest_supplement.json` 记录输入 figure_data 的 SHA256、列、过滤、样本数、聚合和输出 SHA256。
+
+### 4. 视觉检查与可读性修订
+
+用户反馈初版“可读性差、有用信息不明确、排版混乱、文字太多、图注不明确”后，重新设计并逐张检查 PNG：
+
+1. Fig.7 去掉每格的 `m=...` 和重复分母，只在面板副标题写 `n'`/`M`；格内改为 `C <count>` / `P <count>`；加白色 cell grid，底部只保留一行 C/P 与 F3M/F4S 同坏数据的说明。
+2. Fig.S2 只在最左列/最下行显示 tick labels，共享 `D/T_ref` 轴标题；每面板副标题给 `n'`/`M`，避免 16 个面板重复坐标文字。
+3. Fig.8 只画非对角场景对；零值留空、对角省略、S6/scrub=0 斜线但不再重复 `N/A`；仅 k>0 的格子标 `k/10`；标题改为 Bank/Page/Codeword，底部一行说明 S4* 与 hatched 区域。
+4. 在 `figures/captions.md` 追加 Supplement figures 说明和 Fig.7/Fig.8/Fig.S2 完整图注，明确 S1–S6、C/P、n′、分母、N/A、scrub/codeword 假设。
+5. 灰度版本逐张检查；坐标、色条、标题和 S4* 标记仍可读。最终图不再有文字跨格或图例/注释遮挡数据。
+
+### 5. 结果观察（供 G16 使用，不在 G15 写结论）
+
+- P1-G：PREVENTED 2166、CORRUPT_CONSUMED 1920、MASKED 234。
+- P1-H 10-seed 数据：
+  - bank/scrub=1：S2/S3/S4/S6 两两 10/10 不可区分（H-H1 支持）；
+  - codeword/scrub=1：S4/S6 10/10 不可区分，S2/S3 可区分（H-H2 支持）；
+  - scrub=0：S4 三种粒度均 10/10 出现 UE（H-H3 支持）；
+  - bank/scrub=1：S2–S6 的 CoF 规则均 10/10 触发，S1/S5 为 0（H-H4 支持）。
+- F3M PREVENTED 与 fig3 TIMELY 的完整 36 格中 8 格不一致；G16 必须按实际数字写报告，不调参。
+
+### 6. 独立复核
+
+`logs/g15_validate.log`：
+
+```text
+fig7 4320 fig8 330 pairs 90 cof 36 stats 432
+bad 0
+G15_VALIDATE=PASS
+```
+
+检查：figure_data 行数、144 个格子每格 30 seeds、statistics 分子与 fig7 计数一致、P1-H signature 与 metrics 一致、plot manifest 输入/输出 SHA256 与文件一致、所有输出文件存在。
+
+### 7. 命令与退出码
+
+```bash
+.venv/bin/python scripts/aggregate_supplement.py
+# exit 0；G15_AGGREGATE=PASS
+.venv/bin/python scripts/plot_supplement.py
+# 第一次 SyntaxError（global 位置）；修正后 exit 0；G15_PLOT=PASS
+.venv/bin/python - <<'PY' ...独立复核...
+# exit 0；G15_VALIDATE=PASS
+```
+
+### 8. 产物位置
+
+```text
+scripts/aggregate_supplement.py
+scripts/plot_supplement.py
+results/supplement/figure_data/fig7_escape.csv
+results/supplement/figure_data/fig8_signatures.csv
+results/supplement/figure_data/fig8_pairs.csv
+results/supplement/figure_data/fig8_cof_rule.csv
+results/supplement/statistics_supplement.csv
+results/supplement/reconciliation_supplement.json
+figures/fig07_escape_efficacy.*
+figures/fig08_report_ambiguity.*
+figures/figS2_escape_by_config.*
+figures/gray/fig07_escape_efficacy.png
+figures/gray/fig08_report_ambiguity.png
+figures/gray/figS2_escape_by_config.png
+figures/plot_manifest_supplement.json
+figures/captions.md
+logs/g15_aggregate.log
+logs/g15_plot.log
+logs/g15_validate.log
+```
+
+### 9. 下一关唯一任务
+
+**G16：报告/图注/tex、最终回归、补丁与收尾。** 按补充手册 §8/§9 修改 `report/phase1_results.md` 和 `.tex`，审阅/补全已追加的 `figures/captions.md`，新建 `docs/g16_supplement_results.md`；再跑 G10/G13 回归（必须 0 差异），生成包含全部新增文件的 `environment/source_g16.patch` 并更新累计补丁；在固定提交干净副本应用补丁、构建并跑 P1-G/P1-H smoke；更新 README/STATUS。不得改动已有 paper 数字或冻结文件。
+
+## G16 — 报告、图注、最终回归与补丁收尾
+
+执行日期：2026-11-16（UTC）。执行对象：`PHASE1_SUPPLEMENT_HANDOFF.md` §8/§9。用户指示：本轮只修改报告，**无需重跑代码**。
+
+### 1. 实际改动的文件
+
+报告：
+
+```text
+report/phase1_results.md
+report/phase1_results.tex
+figures/captions.md
+docs/g16_supplement_results.md
+```
+
+补丁/文档：
+
+```text
+environment/source_g16.patch
+environment/source.patch
+README.md
+docs/STATUS.md
+docs/implementation_log.md
+logs/g16_patch.log
+```
+
+未修改：任何 C++ 源码/测试、`runs/paper/`、`results/g8/`、`figures/fig01..06`、现有 artifact、冻结数据。
+
+### 2. Markdown 报告增补
+
+`report/phase1_results.md`：
+
+- §1 增加 supplement P1-G/P1-H 两条 scope，并说明独立 4650-case manifest 不计入 2602；
+- §3.1 增加 supplement manifest 表：P1-G 4320、P1-H 330、total 4650；
+- §4.7 新增 P1-G：F3M/F4S/F1W 设计、只读 held-B 评估、n_tiles=8 HOST 的 P/C/M 表、全量 4320 总数、F3M 与 Fig.3 的 28/36 精确一致与 8/36 差异（最大 5.7pp）、F4S 无报告结论、F1W SAME/DIFF 的 990/1080 一致与 90 个 MASKED 差异、DIFF 报告不覆盖 corrupt bank；
+- §4.8 新增 P1-H：S1–S6、三种粒度、scrub 0/1、非单例等价组、CoF 规则、scrub=0 的 S4 UE 与不可纠正性；
+- §5 增加 supplement 4650 = 4650 SUCCESS + 0 FAIL/TIMEOUT/MISSING；
+- §6 表增加 Fig.7/Fig.8/Fig.S2 数据源与样本数；
+- §7 增加“及时控制可扣留构造 escape 的错误输出（有报告时）”和“粗粒度报告不能识别 S4 是否与多个易翻转位共享 codeword”；
+- §8 增加 scrub 理想化、codeword ASSUMED、F3M/F4S 构造模式、一次性注入、whole-kernel 锁定、10 seeds 等限制；
+- §9 增加 supplement 的 expand → run → aggregate → plot 命令。
+
+原有 2602-case 数字、P1-A..P1-F 结论与表格未改。
+
+### 3. LaTeX 报告与图注
+
+`report/phase1_results.tex`：
+
+- 日期改为 2026-11-16；摘要增加 4650 supplement 全部成功；
+- Scope 增加 P1-G/P1-H 说明；
+- 新增 P1-G subsection、`tab:p1g`、`fig:escape`；
+- 新增 P1-H subsection、`tab:p1h`、`tab:cof`、`fig:ambiguity`；
+- 新增 Fig.S2 `fig:escape_config`；
+- Expected negatives、Capability judgment、Limitations 增加 supplement 内容；
+- 新增 Reproducibility section 与 supplement 命令；未本地编译（LaTeX 工具链不可用）。
+
+`figures/captions.md` 已包含 Supplement figures 总说明和 Fig.7/Fig.8/Fig.S2 的
+Source/Matrix/Cell text/Sample/Denominator/Failure handling/Model assumption。
+`docs/g16_supplement_results.md` 逐条判定 H-G1..H-G3、H-H1..H-H4，并记录偏离、
+失败、回归和 clean-replay 未执行。
+
+### 4. 最终回归与冻结检查
+
+```bash
+.venv/bin/python scripts/compare_regression.py
+# exit 0；REGRESSION=PASS（G10 240 cases）
+.venv/bin/python scripts/compare_regression.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --out-dir results/regression_g13
+# exit 0；REGRESSION=PASS（G13 240 cases）
+```
+
+G10 冻结文件复核：33,867/33,868 哈希不变；唯一变化是允许追加的
+`figures/captions.md`（G15 用户可读性修订）。没有把该例外写成“全部冻结不变”。
+
+### 5. 补丁快照
+
+```bash
+cd simulator
+git add -N $(git ls-files --others --exclude-standard)
+git diff --binary > ../environment/source_g16.patch
+git diff --check
+git reset -q
+cp ../environment/source_g16.patch ../environment/source.patch
+git apply --check --reverse ../environment/source_g16.patch
+```
+
+结果：
+
+```text
+41 files changed, 7953 insertions(+), 39 deletions(-)
+source_g16.patch / source.patch SHA256:
+c8cf0ce175141ec6f4880d405efbf19a5b6b725431f18d7c878e974d74fd44ec
+diff_exit=0, diff_check_exit=0, reverse_check_exit=0
+```
+
+补丁包含 Bank/Phase1Reports 修改、全部新增 Phase1 fixture/test（包括 G12/G13）。
+日志：`logs/g16_patch.log`。
+
+### 6. 未执行项
+
+按用户“无需重跑代码”的指示，G16 未执行 clean worktree build/replay，也没有
+重新运行 supplement smoke 或矩阵。`docs/STATUS.md` 和
+`docs/g16_supplement_results.md` 明确标为未执行；没有把旧结果写成新一轮 clean
+replay。最终回归比较是只读比较，不重跑 case。
+
+### 7. 通过/失败检查
+
+通过：
+
+- 报告 MD/LaTeX 与 captions 增补完成；
+- 原有 paper 数字/表格/结论未改；
+- G10/G13 最终回归 `REGRESSION=PASS`；
+- 补丁生成、`git diff --check`、反向 apply 检查；
+- G10 冻结文件 33,867/33,868 不变 + 1 个允许追加的 captions 例外；
+- README/STATUS 更新。
+
+失败：无。
+
+未执行：clean worktree build/replay（用户指示）。
+
+### 8. 产物位置
+
+```text
+report/phase1_results.md
+report/phase1_results.tex
+figures/captions.md
+docs/g16_supplement_results.md
+environment/source_g16.patch
+environment/source.patch
+logs/g16_patch.log
+README.md
+docs/STATUS.md
+docs/implementation_log.md
+```
+
+### 9. 下一关唯一任务
+
+**无。** G0–G16 的报告、图、数据和补丁已收尾；clean replay 未按用户指示执行，
+已在 STATUS 与 G16 结果文档中如实标注。

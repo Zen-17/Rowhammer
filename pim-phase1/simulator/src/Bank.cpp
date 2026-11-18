@@ -141,6 +141,13 @@ void Bank::read(BusPacket* busPacket, Phase1AccessType access, uint64_t cycle)
         if (result.status == Phase1EccStatus::CORRECTED &&
             busPacket->phase1_status == Phase1PacketStatus::OK)
             busPacket->phase1_status = Phase1PacketStatus::CORRECTED;
+        if (result.status == Phase1EccStatus::CORRECTED && phase1Scrub_)
+        {
+            // ASSUMED idealized scrub: direct codeword rewrite, no bus
+            // transaction and no modeled cycle cost.
+            phase1Storage_.writeLegal(key, result.data);
+            phase1ScrubWrites_++;
+        }
         if (result.status == Phase1EccStatus::UNPROTECTED_FORMAT)
         {
             Phase1FormatEvent event;

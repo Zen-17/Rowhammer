@@ -1,6 +1,6 @@
 # HBM-PIM Phase 1
 
-本仓库是 HBM-PIM Phase 1 实验框架的实现工作区。当前完成 **G0（环境/基线）**、**G1（源码审计、Phase1 fixture、地址检查、有界 feeder、无故障正确性）**、**G2（事件记录与数据协议）**、**G3（SECDED 独立模块与存储注入）** 、**G4（全路径 ECC 与粗粒度报告）** 、**G5（输出状态与 host/device 门禁）**、**G6（暂停、排空与两 channel 验证）**、**G7（可信输入恢复与状态复位）**、**G8（paper 矩阵展开与完整执行）** 和 **G9（统计、画图、报告与 artifact）**；Phase 1 G0–G9 已完成。
+本仓库是 HBM-PIM Phase 1 实验框架的实现工作区。当前完成 **G0（环境/基线）**、**G1（源码审计、Phase1 fixture、地址检查、有界 feeder、无故障正确性）**、**G2（事件记录与数据协议）**、**G3（SECDED 独立模块与存储注入）** 、**G4（全路径 ECC 与粗粒度报告）** 、**G5（输出状态与 host/device 门禁）**、**G6（暂停、排空与两 channel 验证）**、**G7（可信输入恢复与状态复位）**、**G8（paper 矩阵展开与完整执行）**、**G9（统计、画图、报告与 artifact）**，以及补充实验 **G10–G16（P1-G 漏检有效性、P1-H 报告序列可区分性、聚合、图与报告）**；Phase 1 G0–G16 已完成。
 
 ## 固定上游
 
@@ -290,6 +290,47 @@ G6 结果：
 证据：`runs/g6/`、`results/g6/`、`docs/g6_pause.md`、
 `runs/g6/clean_replay/`。
 
+## 补充实验 P1-G/P1-H（G10–G16）
+
+补充实验使用独立 manifest，不计入 paper 的 2602 cases。P1-G 构造 F3M/F4S
+ECC 漏检和 F1W_F4S 见证，检查及时控制是否扣留了一个真正错误的输出；P1-H 比较
+bank/page/codeword 粒度、scrub 0/1 下 S1–S6 的公开报告序列。
+
+```bash
+# 环境检查与回归基线
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --results-dir results/regression_g13 --runs-dir runs/regression_g13 --jobs 8
+.venv/bin/python scripts/compare_regression.py \
+  --manifest configs/generated/regression_g13-manifest.json \
+  --out-dir results/regression_g13
+
+# smoke：24 P1-G + 33 P1-H
+.venv/bin/python scripts/expand_supplement.py \
+  --suite configs/suite_supplement.yaml --smoke
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/supplement-smoke-manifest.json \
+  --results-dir results/supplement/smoke \
+  --runs-dir runs/supplement/smoke --jobs 8 --resume
+
+# 全量：4320 P1-G + 330 P1-H
+.venv/bin/python scripts/expand_supplement.py --suite configs/suite_supplement.yaml
+.venv/bin/python scripts/run_suite.py \
+  --manifest configs/generated/supplement-manifest.json \
+  --results-dir results/supplement --runs-dir runs/supplement --jobs 8 --resume
+.venv/bin/python scripts/aggregate_supplement.py
+.venv/bin/python scripts/plot_supplement.py
+```
+
+全量对账：4650 = 4320 P1-G + 330 P1-H，全部 SUCCESS，0 FAIL/TIMEOUT/MISSING。
+P1-G 总结果为 PREVENTED 2166、CORRUPT_CONSUMED 1920、MASKED 234。补充图：
+`figures/fig07_escape_efficacy.*`、`fig08_report_ambiguity.*`、
+`figS2_escape_by_config.*`；统计与图源数据在 `results/supplement/`。
+`codeword` 报告粒度和 `scrub` 均为 ASSUMED 模型接口；F3M/F4S 是构造位模式，
+不是 Rowhammer 概率模型。补丁快照为 `environment/source_g16.patch`。
+G16 的 clean worktree build/replay 按用户“无需重跑代码”的指示未执行，STATUS 与
+`docs/g16_supplement_results.md` 已如实标注。
+
 ## 目录
 
 ```text
@@ -307,6 +348,8 @@ runs/g6/       G6 pause/quiesce、two-channel、clean replay
 runs/g7/       G7 恢复正例/负例/clean replay
 runs/g8/       G8 calibration/clean replay
 runs/paper/    G8 paper 逐 case 运行
+runs/supplement/ G10–G16 P1-G/P1-H 逐 case 运行
+results/supplement/ 补充图源数据、统计与对账
 results/figure_data/ G8/G9 图源数据
 results/statistics.csv G9 统计
 figures/      G9 六图 + 补充图、灰度图、captions、plot manifest
@@ -333,5 +376,9 @@ docs/          source_audit.md、g2_protocol.md、g3_ecc.md、g4_ecc_reports.md�
 - 地址检查是 Scheme8 模型检查，不代表真实 HBM 的所有地址映射细节。
 - G2 的 `reports.csv`/`truth.csv` 在无故障时是 header-only；G4 的 P1-A injection 写 evaluator truth 行，runtime 不读取 truth。
 - `PIMBenchFixture.add` 的已知基线失败保留，不通过修改阈值消除。
+- 补充实验的 F3M/F4S 是 CoF 式构造位模式，不是 Rowhammer 概率；`MASKED` 是 FP16
+  舍入，不计为 PREVENTED。
+- 补充实验的 codeword 报告粒度是 ASSUMED 接口，scrub 是理想化零成本模型；P1-H
+  每个 (scenario, granularity, scrub) 只有 10 seeds，不能外推为真实 HBM 报告能力。
 
 上游代码保留原始 `LICENSE-PIMSimulator` 与 `LICENSE-DRAMSIM2`；本项目新增内容不改变上游许可证。
