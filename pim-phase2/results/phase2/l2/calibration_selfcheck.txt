@@ -1,0 +1,12 @@
+ratio 0.25 rows 90
+  n=1 mean=0.1325 n=30
+  n=8 mean=0.1066 n=30
+  mean_n1_n8=0.1195 (11.95%)
+ratio 1.0 rows 90
+  n=1 mean=0.5300 n=30
+  n=8 mean=0.4261 n=30
+  mean_n1_n8=0.4780 (47.80%)
+reference: H0.25T 10.21%, H1T 43.96%
+L2 mean n1/n8: 11.40% 45.59%
+delta_pp: H0.25T=+1.19 H1T=+1.63
+within_5pp: True

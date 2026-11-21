@@ -1,0 +1,470 @@
+{
+  "pass": true,
+  "assertions": [
+    {
+      "name": "E2E-0 W1 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-0 accounting on/off same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 4130,
+      "actual": 4130
+    },
+    {
+      "name": "E2E-0 accounting on/off same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 observer on/off same metrics",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": {
+        "producer_cycles": 4130,
+        "end_to_end_cycles": 4130,
+        "output_bit_exact": true,
+        "ledger_entries": 8,
+        "ledger_bytes_est": 472,
+        "published": true
+      },
+      "actual": {
+        "producer_cycles": 4130,
+        "end_to_end_cycles": 4130,
+        "output_bit_exact": true,
+        "ledger_entries": 8,
+        "ledger_bytes_est": 472,
+        "published": true
+      }
+    },
+    {
+      "name": "E2E-0 observer on/off same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 full vs tiles same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 4130,
+      "actual": 4130
+    },
+    {
+      "name": "E2E-0 full vs tiles same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 3-segment output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 n=32 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 n=32 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 32,
+      "actual": 32
+    },
+    {
+      "name": "E2E-0 W2 n=24 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W2 n=24 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 24,
+      "actual": 24
+    },
+    {
+      "name": "E2E-0 W2 n=96 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W2 n=96 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 96,
+      "actual": 96
+    },
+    {
+      "name": "E2E-0 W2 full vs tiles same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 10257,
+      "actual": 10257
+    },
+    {
+      "name": "E2E-0 W2 full vs tiles same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-1 k=0 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=0 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        1
+      ],
+      "actual": [
+        1
+      ]
+    },
+    {
+      "name": "E2E-1 k=0 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=0 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=0 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 0",
+      "actual": "0"
+    },
+    {
+      "name": "E2E-1 k=3 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=3 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        4
+      ],
+      "actual": [
+        4
+      ]
+    },
+    {
+      "name": "E2E-1 k=3 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=3 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=3 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 3",
+      "actual": "3"
+    },
+    {
+      "name": "E2E-1 k=7 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=7 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        8
+      ],
+      "actual": [
+        8
+      ]
+    },
+    {
+      "name": "E2E-1 k=7 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=7 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=7 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 7",
+      "actual": "7"
+    },
+    {
+      "name": "E2E-2 k=0 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=0 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=0 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-2 k=3 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=3 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=3 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-2 k=7 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=7 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=7 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-3 affected contains ADD_3",
+      "group": "E2E-3",
+      "pass": true,
+      "expected": "4 in affected",
+      "actual": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "name": "E2E-3 output exact",
+      "group": "E2E-3",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-4 status",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": "SOURCE_REPAIRED_ONLY",
+      "actual": "SOURCE_REPAIRED_ONLY"
+    },
+    {
+      "name": "E2E-4 no replay",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-4 restore bytes",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-4 output exact",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-4 post-recovery read clean",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-5 ADD_2 affected",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "3 in affected",
+      "actual": [
+        3,
+        11
+      ]
+    },
+    {
+      "name": "E2E-5 MUL_2 affected",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "11 in affected",
+      "actual": [
+        3,
+        11
+      ]
+    },
+    {
+      "name": "E2E-5 status not untrusted",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "not untrusted",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-5 output exact",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-5 NO_REPLAY output wrong",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": false,
+      "actual": false
+    },
+    {
+      "name": "E2E-6 report during recovery",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": ">=1",
+      "actual": 1
+    },
+    {
+      "name": "E2E-6 not published",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": false,
+      "actual": false
+    },
+    {
+      "name": "E2E-6 recovery failed",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-7 status",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": "OUTSIDE_WINDOW_NO_TRUSTED_INPUT",
+      "actual": "OUTSIDE_WINDOW_NO_TRUSTED_INPUT"
+    },
+    {
+      "name": "E2E-7 no replay",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-7 poisoned tile",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": "3",
+      "actual": "3"
+    },
+    {
+      "name": "E2E-7 host read denied",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "DIFF all decisions reproduced",
+      "group": "DIFF",
+      "pass": true,
+      "expected": "735/735",
+      "actual": "735/735"
+    }
+  ]
+}

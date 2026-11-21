@@ -1,0 +1,28 @@
+{
+  "cases_file": "results/phase2/l2/cases.csv",
+  "cases_sha256": "de9674cd2d7a103c0eae5ff3f6fbcec3e9afbb7a65900d9b45447f2da3557906",
+  "checks": {
+    "all_main_have_decisions": true,
+    "figure_data_rows": {
+      "p2f1_selectivity.csv": 7560,
+      "p2f2_breakdown.csv": 2160,
+      "p2f3_release.csv": 2280,
+      "p2f4_radius.csv": 900,
+      "p2f5_status.csv": 210,
+      "p2t1_ledger.csv": 36
+    },
+    "ledger_cases": true,
+    "main_cases": true,
+    "radius_cases": true,
+    "release_cases": true,
+    "status_cases": true
+  },
+  "counts": {
+    "ledger": 36,
+    "main": 45360,
+    "radius": 900,
+    "release": 2160,
+    "status": 210
+  },
+  "pass": true
+}

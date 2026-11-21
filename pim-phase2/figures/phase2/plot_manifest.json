@@ -1,0 +1,337 @@
+{
+  "figures": [
+    {
+      "aggregation": "mean per workload/granularity/policy; 95% bootstrap CI",
+      "caption": "P2-F1. Report granularity x policy selectivity for UE reports, n_tiles=32. (a) replayed tile operations as a percentage of all job tile operations; (b) recovery latency normalized to B0 for the same workload, granularity, delay and seed. X labels use bk=bank, pg=page, cw=codeword. Bars are means with 95% bootstrap CI; black short lines are the Oracle lower bound. W3 panel uses K=4; K=16 rows are in statistics.csv. ASSUMED: L2 costs for MUL/RELU.",
+      "columns": [
+        "affected_ops",
+        "correct",
+        "error_class",
+        "fault_operand",
+        "figure",
+        "granularity",
+        "job_tiles",
+        "n_tiles",
+        "policy",
+        "recovery_cycles",
+        "recovery_norm",
+        "replay_fraction",
+        "replay_tiles",
+        "seed",
+        "source",
+        "status",
+        "transport_delay",
+        "workload"
+      ],
+      "figure": "p2f1_selectivity",
+      "filters": {
+        "error_class": "UE",
+        "n_tiles": 32,
+        "workloads": [
+          "W1",
+          "W2",
+          "W3_K4"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f1_selectivity.csv",
+          "sha256": "1d5970a362e32d893c4e5fd128a09fc1a031b31bf244145bbf90905c72376ab7"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f1_selectivity.pdf",
+          "sha256": "67a1c472679391ec55555d149e1f4b9a4c95a8984ecac14349e846cdc491c486"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f1_selectivity.svg",
+          "sha256": "85cd9f9490049c4b2a3d1c1a2acfb5b3d8de614cafff7d546747be3bab69b9b3"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f1_selectivity.png",
+          "sha256": "69cc6987648926d281e53420af0753568431b39096c7f08a07c10280bbb20d07"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f1_selectivity_gray.png",
+          "sha256": "3df537d76e724917b76556fce0a280cc36fd44b350ae0ab88c98a5e8be0d2068"
+        }
+      ],
+      "sample_count": 6480
+    },
+    {
+      "aggregation": "stacked means over 30 seeds x fault operands",
+      "caption": "P2-F2. Recovery-latency breakdown for W1, page reports, n_tiles in {8,32}. Bars are means over 30 seeds x fault operands: quiesce, restore, replay, resume and publish. Diamonds are L3 measured totals for the E2E cases that exist (B0 UE, B1 UE, B2 CE at n=8); missing diamonds mean no L3 case was run for that exact combination.",
+      "columns": [
+        "affected_ops",
+        "correct",
+        "error_class",
+        "fault_operand",
+        "fault_tile",
+        "figure",
+        "granularity",
+        "n_tiles",
+        "policy",
+        "publish_cycles",
+        "quiesce_cycles",
+        "recovery_cycles",
+        "replay_cycles",
+        "replay_tiles",
+        "restore_cycles",
+        "resume_cycles",
+        "seed",
+        "source",
+        "status",
+        "transport_delay",
+        "workload"
+      ],
+      "figure": "p2f2_breakdown",
+      "filters": {
+        "granularity": "page",
+        "n_tiles": [
+          8,
+          32
+        ],
+        "workload": "W1"
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f2_breakdown.csv",
+          "sha256": "5490646cfab49b9eb1a2e3dfd274cc12918f1038e2fb8f70c012130b2f244825"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f2_l3.csv",
+          "sha256": "507a9878692441a51b193008c1be0350c40a9bc211c1c67135ec9c2f3b4dd280"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f2_breakdown.pdf",
+          "sha256": "f715957d36f1dbf802450dc38a58a47a546f165ea18b2586716ade72713d9a1d"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f2_breakdown.svg",
+          "sha256": "f7bd7da1e5c3f4f50d17c8123f142cb24861d82fdbf6d238d3f8ee8033db9754"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f2_breakdown.png",
+          "sha256": "149a98e9b15f85700b8e492ba6763400a6e31049ab9bab7cc11f4f580ea6ff7b"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f2_breakdown_gray.png",
+          "sha256": "a69dc387047c4f2a0d73e46b25cf61231e354376597995635fd89a69721cc78e"
+        }
+      ],
+      "sample_count": 2160
+    },
+    {
+      "aggregation": "mean per workload/release/ratio; 95% bootstrap CI",
+      "caption": "P2-F3. No-fault steady-state overhead versus release delay Delta/T_job for GLOBAL_HOLD and DEP_RELEASE, W1 and W2. Lines are L2 means over 30 seeds with bootstrap CI shading; black x markers are the Phase 1 P1-F measured points for W1 (HOST consumer). Negative DEP_RELEASE values mean the host starts reading a tile before the kernel-level producer barrier.",
+      "columns": [
+        "baseline_end_to_end_cycles",
+        "delta_over_job",
+        "end_to_end_cycles",
+        "figure",
+        "n_tiles",
+        "overhead_fraction",
+        "release",
+        "seed",
+        "source",
+        "workload"
+      ],
+      "figure": "p2f3_release",
+      "filters": {
+        "fault": "none",
+        "workloads": [
+          "W1",
+          "W2"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f3_release.csv",
+          "sha256": "0f676966f1ed73581358840d6afed4da70b5679efaf4dd5d2751d02c19c33f29"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f3_release.pdf",
+          "sha256": "f41facf18fe59b8135b69c368a4d4f088eb6a08c09e40564fc8b55671f0263df"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f3_release.svg",
+          "sha256": "3cd2dd14290655841814606e98b64c5f8d3916bf84778c824c1162793470de2b"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f3_release.png",
+          "sha256": "95fa676d017965afa6e397359c393e202c01baaa7d0b5fb2ad1979ccbb53a174"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f3_release_gray.png",
+          "sha256": "e717ea00939b3109d2cba4207a6ab652ae49e1cb21cb7cb63a3fefb10935e36f"
+        }
+      ],
+      "sample_count": 780
+    },
+    {
+      "aggregation": "Wilson 95% coverage and mean replay fraction",
+      "caption": "P2-F4. Missed-error coverage versus replay cost. Each curve is a silent distance class (CE report plus one latent error); markers are B2, B2R-0, B2R-1, B2R-2 and B0. Coverage uses Wilson 95% CI over 30 seeds; the distance distribution is ASSUMED, not measured. A minus-class case whose primary tile lies on the first row falls back to the corresponding plus class, so some minus and plus curves overlap.",
+      "columns": [
+        "correct",
+        "distance_class",
+        "figure",
+        "n_tiles",
+        "policy",
+        "recovery_cycles",
+        "replay_fraction",
+        "replay_tiles",
+        "seed",
+        "silent_repaired",
+        "source"
+      ],
+      "figure": "p2f4_radius",
+      "filters": {
+        "distance_classes": [
+          "same_row",
+          "minus1",
+          "plus1",
+          "minus2",
+          "plus2",
+          "far"
+        ],
+        "error_class": "CE",
+        "n_tiles": 32,
+        "policies": [
+          "B2",
+          "B2R-0",
+          "B2R-1",
+          "B2R-2",
+          "B0"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f4_radius.csv",
+          "sha256": "5a1e60df6f7a6c3cbf196ad9105cc76ac11338a24bb1a36192485a755909ac72"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f4_radius.pdf",
+          "sha256": "79adf9030410dc438ae551749b7ad635bc2fdab577979619df6a75e9c7583b31"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f4_radius.svg",
+          "sha256": "09a0b22a2edc5106220ebd4e0b2ee186e1fa3ed2827688d34c8157e7e6ee15e9"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f4_radius.png",
+          "sha256": "7e1d7aeb5977f9373532e997031e6c170d35efb11ad686757acaa2709e660d9c"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f4_radius_gray.png",
+          "sha256": "67c47e47cb3cc68de6c817ce0f508b98c3cc91727b6b343f719cfa081b4dc05e"
+        }
+      ],
+      "sample_count": 900
+    },
+    {
+      "aggregation": "share of P2Status per scenario",
+      "caption": "P2-F5. P2Status distribution over 30 seeds for the status scenarios: normal UE, CE, Delta_cfg/Delta_true=0.5, Delta_cfg/Delta_true=1.0 with early consumption, missing checkpoint, truncated ledger and report-queue overflow.",
+      "columns": [
+        "correct",
+        "escaped_bad",
+        "figure",
+        "poisoned",
+        "scenario",
+        "seed",
+        "source",
+        "status"
+      ],
+      "figure": "p2f5_status",
+      "filters": {
+        "n_tiles": 32,
+        "seeds": 30,
+        "workload": "W1"
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f5_status.csv",
+          "sha256": "09637801dae2e71f6768bd7755b76c89326d932eba721d54967e4562b5af01b6"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f5_status.pdf",
+          "sha256": "1df20f5407e50f55fdc69a9fc4a7a213a1ba97b2cbe772afbadf7ebbf155109b"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f5_status.svg",
+          "sha256": "86c7ec8ba8a29bc74d518417ec1eeee47067eac18244da8d9aa20f2db1c3e98f"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f5_status.png",
+          "sha256": "49d0f2710c7c854a6a02228d5f8797e8d190a36f4356da5786f6a8a305e851f5"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f5_status_gray.png",
+          "sha256": "9268a93aa31e879e32117d40df198526afabc6b6d2a506f83624596a17d0e56b"
+        }
+      ],
+      "sample_count": 210
+    },
+    {
+      "aggregation": "per run: L2 prediction vs L3 measurement",
+      "caption": "P2-F6. L2-predicted versus L3-measured recovery cycles after refitting the W1 per-tile cost on the L3 E2E-0 no-fault runs; W2 is the held-out validation set. Hollow points are the W1 fit set, filled points are W2. The dashed line is y=x. Both MAPE values are printed in the panel; the W2 validation MAPE is the out-of-sample number.",
+      "columns": [
+        "error_class",
+        "fault_operand",
+        "fault_tile",
+        "figure",
+        "granularity",
+        "l2_recovery_cycles",
+        "l3_recovery_cycles",
+        "n_tiles",
+        "policy",
+        "relative_error",
+        "seed",
+        "source",
+        "split",
+        "workload"
+      ],
+      "figure": "p2f6_validation",
+      "filters": {
+        "workloads": [
+          "W1",
+          "W2"
+        ]
+      },
+      "inputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/results/phase2/figure_data/p2f6_validation.csv",
+          "sha256": "58894d284259449d1a1880589699f153325f385ff9e1b2d47f0730f88490f240"
+        }
+      ],
+      "outputs": [
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f6_validation.pdf",
+          "sha256": "4d48694e8d9f8e519708a852200711be28855265f8c5c4f92eb77cc2ecbe2627"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f6_validation.svg",
+          "sha256": "4d069a48fc55f4a1b3fcef867c0210065bb558be0c8c5f13714f24921dc1fe29"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f6_validation.png",
+          "sha256": "8f6954d807330b996926124d973eaee5f79ef5d22a8f8348c6d38fc42d070872"
+        },
+        {
+          "path": "/opt/data/data/workspace-dynamic/Rowhammer/pim-phase2/figures/phase2/p2f6_validation_gray.png",
+          "sha256": "4f2863f71afd80abf2e6a6862cdf782635abf012a9fefcc58e4e294f6257d7ac"
+        }
+      ],
+      "sample_count": 120
+    }
+  ],
+  "schema_version": 1
+}

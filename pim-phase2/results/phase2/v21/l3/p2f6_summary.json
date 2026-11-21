@@ -1,0 +1,21 @@
+{
+  "rows": 1468,
+  "by_workload_metric": {
+    "W1/recovery_cycles_excl_resume": {
+      "n": 370,
+      "mape_percent": 19.095544825711876
+    },
+    "W1/fault_overhead_cycles": {
+      "n": 370,
+      "mape_percent": 16.13676588110613
+    },
+    "W2/recovery_cycles_excl_resume": {
+      "n": 363,
+      "mape_percent": 21.16377749644378
+    },
+    "W2/fault_overhead_cycles": {
+      "n": 363,
+      "mape_percent": 11.888432732193571
+    }
+  }
+}

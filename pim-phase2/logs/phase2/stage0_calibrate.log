@@ -1,0 +1,4 @@
+CALIBRATION=configs/phase2/calibration.json
+c_tile=475.1429 c_fix=328.8571 c_restore_per_byte=0.064819 c_restore_fix=26.0000 c_quiesce=41.0
+consumer: c_host_fix=20.1429 c_host_per_tile=692.8571
+REFERENCE_CHECK=PASS

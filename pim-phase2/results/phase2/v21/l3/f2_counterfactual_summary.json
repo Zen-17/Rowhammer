@@ -1,0 +1,8 @@
+{
+  "rows": 360,
+  "counts": {
+    "MASKED": 160,
+    "RECOVERY_NEEDED_AND_DONE": 200
+  },
+  "source": "results/phase2/v21/l3/f2_counterfactual.csv"
+}

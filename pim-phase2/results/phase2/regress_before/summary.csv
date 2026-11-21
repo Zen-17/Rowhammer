@@ -1,0 +1,6 @@
+group,cases,success,expected_negative,fail,timeout,contract_pass
+P1-A,144,144,0,0,0,144
+P1-C,60,60,0,0,0,60
+P1-E,2,2,0,0,0,2
+P1-F Cost,16,16,0,0,0,16
+P1-F Robustness,18,18,0,0,0,18

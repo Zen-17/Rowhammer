@@ -1,0 +1,916 @@
+{
+  "schema_version": 1,
+  "assertions": [
+    {
+      "name": "calibration.c_fix",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": "329.0 +/- 1",
+      "actual": 328.85714285714266
+    },
+    {
+      "name": "calibration.c_quiesce",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": "41.0 +/- 1",
+      "actual": 41.0
+    },
+    {
+      "name": "calibration.c_restore_fix",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": "26.0 +/- 1",
+      "actual": 26.0
+    },
+    {
+      "name": "calibration.c_restore_per_byte",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": "0.0648 +/- 1",
+      "actual": 0.0648193359375
+    },
+    {
+      "name": "calibration.c_tile",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": "475.0 +/- 1",
+      "actual": 475.14285714285717
+    },
+    {
+      "name": "regression.before.240",
+      "group": "STAGE0",
+      "pass": true,
+      "expected": 240,
+      "actual": 240
+    },
+    {
+      "name": "isolation.grep",
+      "group": "STAGE2",
+      "pass": true,
+      "expected": "ISOLATION=PASS",
+      "actual": "ISOLATION=PASS files_checked=12 require_all=1"
+    },
+    {
+      "name": "python.U1_U15",
+      "group": "STAGE2",
+      "pass": true,
+      "expected": "all pass",
+      "actual": "16 passed in 0.08s"
+    },
+    {
+      "name": "l2.matrix_counts",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "45360 main / 900 radius / 2160 release / 210 status / 36 ledger",
+      "actual": "{\"ledger\": 36, \"main\": 45360, \"radius\": 900, \"release\": 2160, \"status\": 210}"
+    },
+    {
+      "name": "l2.main_correct",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "45360/45360",
+      "actual": "45360/45360"
+    },
+    {
+      "name": "l2.status_distribution",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "each scenario 30/30 expected status",
+      "actual": {
+        "NORMAL_UE": {
+          "SELECTIVE_RECOVERED": 30,
+          "WHOLE_JOB_FALLBACK": 0,
+          "SOURCE_REPAIRED_ONLY": 0,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        },
+        "CE": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 0,
+          "SOURCE_REPAIRED_ONLY": 30,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        },
+        "DELTA_SHORT_0.5": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 0,
+          "SOURCE_REPAIRED_ONLY": 30,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        },
+        "DELTA_FULL_1.0": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 0,
+          "SOURCE_REPAIRED_ONLY": 0,
+          "PARTIAL_WITH_ESCAPE": 30,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        },
+        "CHECKPOINT_MISSING": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 0,
+          "SOURCE_REPAIRED_ONLY": 0,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 30
+        },
+        "LEDGER_TRUNCATED": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 30,
+          "SOURCE_REPAIRED_ONLY": 0,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        },
+        "REPORT_OVERFLOW": {
+          "SELECTIVE_RECOVERED": 0,
+          "WHOLE_JOB_FALLBACK": 30,
+          "SOURCE_REPAIRED_ONLY": 0,
+          "PARTIAL_WITH_ESCAPE": 0,
+          "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 0
+        }
+      }
+    },
+    {
+      "name": "l2.radius_pareto",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "B2R-k covers k rows, far uncovered",
+      "actual": {
+        "far/B2R-0": 0.0,
+        "minus1/B2R-0": 0.0,
+        "minus2/B2R-0": 0.0,
+        "plus1/B2R-0": 0.0,
+        "plus2/B2R-0": 0.0,
+        "same_row/B2R-0": 1.0,
+        "far/B2R-1": 0.0,
+        "minus1/B2R-1": 1.0,
+        "minus2/B2R-1": 0.0,
+        "plus1/B2R-1": 1.0,
+        "plus2/B2R-1": 0.0,
+        "same_row/B2R-1": 1.0,
+        "far/B2R-2": 0.0,
+        "minus1/B2R-2": 1.0,
+        "minus2/B2R-2": 1.0,
+        "plus1/B2R-2": 1.0,
+        "plus2/B2R-2": 1.0,
+        "same_row/B2R-2": 1.0
+      }
+    },
+    {
+      "name": "l2.release_calibration_0.25",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "10.21 +/- 5 pp",
+      "actual": "11.95%"
+    },
+    {
+      "name": "l2.release_calibration_1.0",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": "43.96 +/- 5 pp",
+      "actual": "47.80%"
+    },
+    {
+      "name": "l2.statistics_nonempty",
+      "group": "STAGE3",
+      "pass": true,
+      "expected": ">0 rows",
+      "actual": 449
+    },
+    {
+      "name": "cpp.U1_U15_and_address_export",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": "PASSED",
+      "actual": "[  PASSED  ] 17 tests."
+    },
+    {
+      "name": "cpp.address_vectors.count",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": ">=1000",
+      "actual": 3000
+    },
+    {
+      "name": "python.address_vectors_match",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": "all pass",
+      "actual": "1 passed in 0.05s"
+    },
+    {
+      "name": "regression.after.zero_drift",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": "REGRESSION=PASS",
+      "actual": "checked=240 failures=0"
+    },
+    {
+      "name": "source.patch.whitelist",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": [
+        "Phase1Feeder.cpp",
+        "Phase1Feeder.h",
+        "tests/PIMKernel.cpp",
+        "tests/PIMKernel.h"
+      ],
+      "actual": [
+        "Phase1Feeder.cpp",
+        "Phase1Feeder.h",
+        "tests/PIMKernel.cpp",
+        "tests/PIMKernel.h"
+      ]
+    },
+    {
+      "name": "source.patch.exists",
+      "group": "STAGE4",
+      "pass": true,
+      "expected": ">0 bytes",
+      "actual": 129701
+    },
+    {
+      "name": "l3.run_all_cases",
+      "group": "STAGE5",
+      "pass": true,
+      "expected": "745/745 reconciled",
+      "actual": "{\"EXPECTED_NEGATIVE\": 6, \"SUCCESS\": 739}"
+    },
+    {
+      "name": "E2E-0 W1 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-0 accounting on/off same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 4130,
+      "actual": 4130
+    },
+    {
+      "name": "E2E-0 accounting on/off same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 observer on/off same metrics",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": {
+        "producer_cycles": 4130,
+        "end_to_end_cycles": 4130,
+        "output_bit_exact": true,
+        "ledger_entries": 8,
+        "ledger_bytes_est": 472,
+        "published": true
+      },
+      "actual": {
+        "producer_cycles": 4130,
+        "end_to_end_cycles": 4130,
+        "output_bit_exact": true,
+        "ledger_entries": 8,
+        "ledger_bytes_est": 472,
+        "published": true
+      }
+    },
+    {
+      "name": "E2E-0 observer on/off same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 full vs tiles same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 4130,
+      "actual": 4130
+    },
+    {
+      "name": "E2E-0 full vs tiles same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-0 3-segment output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 n=32 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W1 n=32 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 32,
+      "actual": 32
+    },
+    {
+      "name": "E2E-0 W2 n=24 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W2 n=24 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 24,
+      "actual": 24
+    },
+    {
+      "name": "E2E-0 W2 n=96 output exact",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-0 W2 n=96 ledger entries",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 96,
+      "actual": 96
+    },
+    {
+      "name": "E2E-0 W2 full vs tiles same cycles",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": 10257,
+      "actual": 10257
+    },
+    {
+      "name": "E2E-0 W2 full vs tiles same output",
+      "group": "E2E-0",
+      "pass": true,
+      "expected": "same sha256",
+      "actual": "compared"
+    },
+    {
+      "name": "E2E-1 k=0 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=0 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        1
+      ],
+      "actual": [
+        1
+      ]
+    },
+    {
+      "name": "E2E-1 k=0 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=0 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=0 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 0",
+      "actual": "0"
+    },
+    {
+      "name": "E2E-1 k=3 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=3 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        4
+      ],
+      "actual": [
+        4
+      ]
+    },
+    {
+      "name": "E2E-1 k=3 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=3 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=3 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 3",
+      "actual": "3"
+    },
+    {
+      "name": "E2E-1 k=7 status",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "SELECTIVE_RECOVERED",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-1 k=7 affected",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": [
+        8
+      ],
+      "actual": [
+        8
+      ]
+    },
+    {
+      "name": "E2E-1 k=7 restore bytes",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-1 k=7 output exact",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-1 k=7 NO_REPLAY tile mismatch",
+      "group": "E2E-1",
+      "pass": true,
+      "expected": "tile 7",
+      "actual": "7"
+    },
+    {
+      "name": "E2E-2 k=0 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=0 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=0 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-2 k=3 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=3 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=3 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-2 k=7 status",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": "WHOLE_JOB_FALLBACK",
+      "actual": "WHOLE_JOB_FALLBACK"
+    },
+    {
+      "name": "E2E-2 k=7 output exact",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-2 k=7 replay tiles",
+      "group": "E2E-2",
+      "pass": true,
+      "expected": 8,
+      "actual": 8
+    },
+    {
+      "name": "E2E-3 affected contains ADD_3",
+      "group": "E2E-3",
+      "pass": true,
+      "expected": "4 in affected",
+      "actual": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "name": "E2E-3 output exact",
+      "group": "E2E-3",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-4 status",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": "SOURCE_REPAIRED_ONLY",
+      "actual": "SOURCE_REPAIRED_ONLY"
+    },
+    {
+      "name": "E2E-4 no replay",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-4 restore bytes",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 4096,
+      "actual": 4096
+    },
+    {
+      "name": "E2E-4 output exact",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-4 post-recovery read clean",
+      "group": "E2E-4",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-5 ADD_2 affected",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "3 in affected",
+      "actual": [
+        3,
+        11
+      ]
+    },
+    {
+      "name": "E2E-5 MUL_2 affected",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "11 in affected",
+      "actual": [
+        3,
+        11
+      ]
+    },
+    {
+      "name": "E2E-5 status not untrusted",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": "not untrusted",
+      "actual": "SELECTIVE_RECOVERED"
+    },
+    {
+      "name": "E2E-5 output exact",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-5 NO_REPLAY output wrong",
+      "group": "E2E-5",
+      "pass": true,
+      "expected": false,
+      "actual": false
+    },
+    {
+      "name": "E2E-6 report during recovery",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": ">=1",
+      "actual": 1
+    },
+    {
+      "name": "E2E-6 not published",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": false,
+      "actual": false
+    },
+    {
+      "name": "E2E-6 recovery failed",
+      "group": "E2E-6",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "E2E-7 status",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": "OUTSIDE_WINDOW_NO_TRUSTED_INPUT",
+      "actual": "OUTSIDE_WINDOW_NO_TRUSTED_INPUT"
+    },
+    {
+      "name": "E2E-7 no replay",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": 0,
+      "actual": 0
+    },
+    {
+      "name": "E2E-7 poisoned tile",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": "3",
+      "actual": "3"
+    },
+    {
+      "name": "E2E-7 host read denied",
+      "group": "E2E-7",
+      "pass": true,
+      "expected": true,
+      "actual": true
+    },
+    {
+      "name": "DIFF all decisions reproduced",
+      "group": "DIFF",
+      "pass": true,
+      "expected": "735/735",
+      "actual": "735/735"
+    },
+    {
+      "name": "l3.differential",
+      "group": "DIFF",
+      "pass": true,
+      "expected": "735/735",
+      "actual": "735/735"
+    },
+    {
+      "name": "l3.p2f6.validation_mape_reported",
+      "group": "STAGE6",
+      "pass": true,
+      "expected": ">=10 validation rows",
+      "actual": "rows=60 MAPE=22.43%"
+    },
+    {
+      "name": "figure.p2f1_selectivity.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f1_selectivity.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f1_selectivity.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f1_selectivity.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f2_breakdown.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f2_breakdown.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f2_breakdown.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f2_breakdown.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f3_release.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f3_release.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f3_release.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f3_release.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f4_radius.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f4_radius.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f4_radius.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f4_radius.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f5_status.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f5_status.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f5_status.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f5_status.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f6_validation.pdf",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f6_validation.svg",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f6_validation.png",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figure.p2f6_validation.gray",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figures.captions",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "figures.manifest",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "report.phase2_results",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    },
+    {
+      "name": "reproduce.script",
+      "group": "STAGE7",
+      "pass": true,
+      "expected": "exists",
+      "actual": true
+    }
+  ],
+  "count": 113,
+  "passed": 113,
+  "pass": true
+}

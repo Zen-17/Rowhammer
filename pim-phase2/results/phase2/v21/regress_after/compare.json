@@ -1,0 +1,14 @@
+{
+  "after": "runs/phase2/v21/regress_after",
+  "before": "runs/phase2/regress_before",
+  "cases_checked": 240,
+  "failures": [],
+  "ignored_keys": [
+    "generated_utc",
+    "paired_ext_off_wall_seconds",
+    "start_time_utc",
+    "wall_overhead_fraction",
+    "wall_seconds"
+  ],
+  "pass": true
+}

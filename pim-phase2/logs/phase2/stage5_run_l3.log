@@ -1,0 +1,17 @@
+[50/745] sweep_w1_n8_bank_F1_first_B1_s1 SUCCESS
+[100/745] sweep_w1_n8_bank_F2_middle_B1_s2 SUCCESS
+[150/745] sweep_w1_n8_page_F1_last_B0_s0 SUCCESS
+[200/745] sweep_w1_n8_page_F2_last_B1_s4 SUCCESS
+[250/745] sweep_w1_n32_bank_F1_last_B0_s4 SUCCESS
+[300/745] sweep_w1_n32_page_F1_first_B2_s0 SUCCESS
+[350/745] sweep_w1_n32_page_F2_first_B2_s3 SUCCESS
+[400/745] sweep_w1_n32_page_F2_last_B1_s2 SUCCESS
+[450/745] sweep_w2_n8_bank_F2_first_B1_s4 SUCCESS
+[500/745] sweep_w2_n8_page_F1_middle_B2_s2 SUCCESS
+[550/745] sweep_w2_n8_page_F2_last_B0_s2 SUCCESS
+[600/745] sweep_w2_n32_bank_F1_last_B0_s0 SUCCESS
+[650/745] sweep_w2_n32_page_F1_first_B1_s1 SUCCESS
+[700/745] sweep_w2_n32_page_F2_last_B2_s0 SUCCESS
+[745/745] sweep_w2_n32_page_F2_last_B0_s0 SUCCESS
+L3_COUNTS={"EXPECTED_NEGATIVE": 6, "SUCCESS": 739}
+L3_RUN=PASS

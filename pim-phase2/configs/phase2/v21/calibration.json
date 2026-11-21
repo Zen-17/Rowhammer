@@ -1,0 +1,358 @@
+{
+  "assumptions": {
+    "MUL_RELU_tile_cost": "v2.1 fits ADD/MUL/RELU separately from L3 no-fault kernel timings; the v2 ASSUMED ADD-cost reuse is no longer used.",
+    "fixed_overhead_split": "half of c_fix is charged before the first tile (ASSUMED)"
+  },
+  "calibration_split": {
+    "fit": "L3 E2E-0 no-fault W1/W2 n_tiles={8,16,32}",
+    "validation": "all L3 W1/W2 fault recovery cases"
+  },
+  "consumer_model": {
+    "assumed_extrapolation": "n_tiles 32/128 are extrapolated",
+    "model": "c_host_fix + n_tiles * c_host_per_tile",
+    "parameters": {
+      "c_host_fix": 20.142857142856883,
+      "c_host_per_tile": 692.8571428571429
+    },
+    "points": [
+      {
+        "median_host_extra_cycles": 713.0,
+        "n_tiles": 1,
+        "residual": 2.2737367544323206e-13
+      },
+      {
+        "median_host_extra_cycles": 5563.0,
+        "n_tiles": 8,
+        "residual": 0.0
+      }
+    ],
+    "provenance": {
+      "aggregation": "median per n_tiles",
+      "column": "end_to_end_cycles - producer_cycles",
+      "file": "pim-phase1/results/figure_data/fig6_cost.csv",
+      "filter": "policy==EXT_OFF, consumer==HOST",
+      "rows": 60,
+      "sha256": "b1a9c760024801e1699875f9fc17c7f885f2a22f3e1200c744f2e6c63230bb95"
+    }
+  },
+  "fits": {
+    "quiesce_cycles": {
+      "assumed": false,
+      "model": "median",
+      "points": [
+        {
+          "handler_delay": 0,
+          "quiesce_cycles": 21,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 8,
+          "quiesce_cycles": 13,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 64,
+          "quiesce_cycles": 4,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 0,
+          "quiesce_cycles": 49,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 8,
+          "quiesce_cycles": 41,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 64,
+          "quiesce_cycles": 53,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 0,
+          "quiesce_cycles": 49,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 8,
+          "quiesce_cycles": 41,
+          "scenario": "ACTUAL_CE"
+        },
+        {
+          "handler_delay": 64,
+          "quiesce_cycles": 53,
+          "scenario": "ACTUAL_CE"
+        }
+      ],
+      "provenance": {
+        "column": "quiesce_cycles",
+        "file": "pim-phase1/results/figure_data/fig4_quiescence.csv",
+        "filter": "scenario==ACTUAL_CE",
+        "rows": 9,
+        "sha256": "63439713e2dd9ac2ed162b7fd9b57f70770963b0ec9c421af78a68bc7e1897d3"
+      }
+    },
+    "reexec_cycles": {
+      "assumed": false,
+      "model": "c_fix + n_tiles * c_tile",
+      "points": [
+        {
+          "median_reexec_cycles": 804.0,
+          "n_tiles": 1,
+          "residual": 2.2737367544323206e-13
+        },
+        {
+          "median_reexec_cycles": 4130.0,
+          "n_tiles": 8,
+          "residual": 0.0
+        }
+      ],
+      "provenance": {
+        "aggregation": "median per n_tiles",
+        "column": "reexec_cycles",
+        "file": "pim-phase1/results/g7/summary.csv",
+        "filter": "kind==positive",
+        "rows": 20,
+        "sha256": "9cfc565f93e21aeed6dfecb5a90599d301f6c16c2018d2ab4754357190fb0370"
+      }
+    },
+    "restore_cycles": {
+      "assumed": false,
+      "model": "c_restore_fix + restore_bytes * c_restore_per_byte",
+      "points": [
+        {
+          "median_restore_cycles": 557.0,
+          "residual": 0.0,
+          "restore_bytes": 8192
+        },
+        {
+          "median_restore_cycles": 4274.0,
+          "residual": 0.0,
+          "restore_bytes": 65536
+        }
+      ],
+      "provenance": {
+        "aggregation": "median per n_tiles",
+        "column": "restore_cycles",
+        "file": "pim-phase1/results/g7/summary.csv",
+        "filter": "kind==positive",
+        "rows": 20,
+        "sha256": "9cfc565f93e21aeed6dfecb5a90599d301f6c16c2018d2ab4754357190fb0370"
+      }
+    }
+  },
+  "generated_by": "scripts/phase2/v21_calibrate.py",
+  "kernel_costs": {
+    "W1": [
+      [
+        788.9999999999973,
+        418.2678571428572
+      ]
+    ],
+    "W2": [
+      [
+        884.9999999999982,
+        408.00000000000006
+      ],
+      [
+        611.9999999999982,
+        403.25000000000006
+      ],
+      [
+        63.99999999999818,
+        282.7142857142858
+      ]
+    ],
+    "W3_K16": [
+      [
+        788.9999999999973,
+        418.2678571428572
+      ]
+    ],
+    "W3_K4": [
+      [
+        788.9999999999973,
+        418.2678571428572
+      ]
+    ],
+    "W4_F1": [
+      [
+        884.9999999999982,
+        408.00000000000006
+      ],
+      [
+        611.9999999999982,
+        403.25000000000006
+      ],
+      [
+        63.99999999999818,
+        282.7142857142858
+      ]
+    ],
+    "W4_F16": [
+      [
+        884.9999999999982,
+        408.00000000000006
+      ],
+      [
+        611.9999999999982,
+        403.25000000000006
+      ],
+      [
+        63.99999999999818,
+        282.7142857142858
+      ]
+    ],
+    "W4_F4": [
+      [
+        884.9999999999982,
+        408.00000000000006
+      ],
+      [
+        611.9999999999982,
+        403.25000000000006
+      ],
+      [
+        63.99999999999818,
+        282.7142857142858
+      ]
+    ]
+  },
+  "kernel_fits": {
+    "W1.ADD": {
+      "c_fix": 788.9999999999973,
+      "c_tile": 418.2678571428572,
+      "max_relative_residual_percent": 0.12436951564978051,
+      "nonlinear": false,
+      "points": [
+        {
+          "cycles": 4130,
+          "n_tiles": 8,
+          "residual": -5.142857142855064
+        },
+        {
+          "cycles": 7489,
+          "n_tiles": 16,
+          "residual": 7.7142857142871435
+        },
+        {
+          "cycles": 14171,
+          "n_tiles": 32,
+          "residual": -2.571428571427532
+        }
+      ]
+    },
+    "W2.ADD": {
+      "c_fix": 884.9999999999982,
+      "c_tile": 408.00000000000006,
+      "max_relative_residual_percent": 0.2892263195950394,
+      "nonlinear": false,
+      "points": [
+        {
+          "cycles": 4137,
+          "n_tiles": 8,
+          "residual": -11.999999999998181
+        },
+        {
+          "cycles": 7431,
+          "n_tiles": 16,
+          "residual": 18.00000000000091
+        },
+        {
+          "cycles": 13935,
+          "n_tiles": 32,
+          "residual": -6.0
+        }
+      ]
+    },
+    "W2.MUL": {
+      "c_fix": 611.9999999999982,
+      "c_tile": 403.25000000000006,
+      "max_relative_residual_percent": 1.354872329338162,
+      "nonlinear": false,
+      "points": [
+        {
+          "cycles": 3786,
+          "n_tiles": 8,
+          "residual": -51.999999999998636
+        },
+        {
+          "cycles": 7142,
+          "n_tiles": 16,
+          "residual": 78.00000000000091
+        },
+        {
+          "cycles": 13490,
+          "n_tiles": 32,
+          "residual": -26.0
+        }
+      ]
+    },
+    "W2.RELU": {
+      "c_fix": 63.99999999999818,
+      "c_tile": 282.7142857142858,
+      "max_relative_residual_percent": 0.35626535626541234,
+      "nonlinear": false,
+      "points": [
+        {
+          "cycles": 2334,
+          "n_tiles": 8,
+          "residual": 8.285714285715585
+        },
+        {
+          "cycles": 4575,
+          "n_tiles": 16,
+          "residual": -12.428571428570649
+        },
+        {
+          "cycles": 9115,
+          "n_tiles": 32,
+          "residual": 4.142857142856883
+        }
+      ]
+    }
+  },
+  "parameters": {
+    "c_fix": 328.85714285714266,
+    "c_quiesce": 41.0,
+    "c_restore_fix": 26.0,
+    "c_restore_per_byte": 0.0648193359375,
+    "c_tile": 475.14285714285717
+  },
+  "reference_check": {
+    "c_fix": {
+      "delta": -0.14285714285733775,
+      "expected": 329.0,
+      "observed": 328.85714285714266,
+      "pass": true
+    },
+    "c_quiesce": {
+      "delta": 0.0,
+      "expected": 41.0,
+      "observed": 41.0,
+      "pass": true
+    },
+    "c_restore_fix": {
+      "delta": 0.0,
+      "expected": 26.0,
+      "observed": 26.0,
+      "pass": true
+    },
+    "c_restore_per_byte": {
+      "delta": 1.9335937500003508e-05,
+      "expected": 0.0648,
+      "observed": 0.0648193359375,
+      "pass": true
+    },
+    "c_tile": {
+      "delta": 0.14285714285716722,
+      "expected": 475.0,
+      "observed": 475.14285714285717,
+      "pass": true
+    }
+  },
+  "reference_check_pass": true,
+  "schema_version": 2
+}

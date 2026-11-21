@@ -1,0 +1,10 @@
+RELOCATED_MANIFEST=configs/generated/phase2/regression-manifest-after.json
+RUN_ROOT=runs/phase2/regress_after
+OLD_ROOT=/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1
+NEW_ROOT=/opt/data/data/workspace-dynamic/Rowhammer/pim-phase1
+CASES=240
+  P1-A: 144
+  P1-C: 60
+  P1-E: 2
+  P1-F Cost: 16
+  P1-F Robustness: 18

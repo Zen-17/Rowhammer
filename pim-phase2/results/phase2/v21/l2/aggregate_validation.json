@@ -1,0 +1,22 @@
+{
+  "cases_file": "results/phase2/v21/l2/cases.csv",
+  "counts": {
+    "late": 7200,
+    "ledger": 36,
+    "main": 45360,
+    "radius": 900,
+    "release": 2160,
+    "status": 270,
+    "window": 3780
+  },
+  "figure_rows": {
+    "p2f1_selectivity.csv": 7560,
+    "p2f2_breakdown.csv": 2175,
+    "p2f3_release.csv": 2286,
+    "p2f4_radius.csv": 5,
+    "p2f5_status.csv": 10,
+    "p2f6_validation.csv": 1468,
+    "p2f7_late.csv": 7204
+  },
+  "pass": true
+}

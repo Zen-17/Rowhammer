@@ -1,0 +1,67 @@
+schema_version: 1
+description: >
+  Phase 2 v2.1 L2 sweep matrix.  All times come from
+  configs/phase2/v21/calibration.json; every case is identified by workload,
+  n_tiles, granularity, error class, fault operand, transport delay, policy,
+  window mode and seed.  The fault tile is derived deterministically from
+  (workload, operand, seed) so runs are reproducible.
+calibration: configs/phase2/v21/calibration.json
+seeds:
+  start: 0
+  stop: 30
+outputs:
+  cases: results/phase2/v21/l2/cases.csv
+  figure_data: results/phase2/v21/figure_data
+  statistics: results/phase2/v21/statistics.csv
+  validation: results/phase2/v21/validation.json
+matrices:
+  main:
+    workloads: [W1, W2, W3_K4, W3_K16]
+    n_tiles: [8, 32, 128]
+    granularity: [bank, page, codeword]
+    error_class: [CE, UE]
+    policies: [B0, B1, B2, Oracle]
+    transport_delay: [16, 256, 4096]
+    window_mode: AUTO
+  window_control:
+    workloads: [W1, W2, W3_K4, W3_K16]
+    n_tiles: [32]
+    granularity: [bank, page]
+    policies: [B1, B2, Oracle]
+    transport_delay: [16, 256, 4096]
+    window_mode: DELTA
+  radius:
+    workloads: [W1]
+    n_tiles: [32]
+    granularity: [page]
+    error_class: [CE]
+    distances: [same_row, plus1, minus1, plus2, minus2, far]
+    policies: [B2, B2R-0, B2R-1, B2R-2, B0]
+    transport_delay: [256]
+  release:
+    workloads: [W1, W2]
+    n_tiles: [1, 8, 32]
+    delta_over_job: [0.0, 0.05, 0.1, 0.25, 0.5, 1.0]
+    release: [GLOBAL_HOLD, DEP_RELEASE]
+  status:
+    workloads: [W1]
+    n_tiles: [32]
+    scenarios: [NORMAL_UE, CE, DELTA_SHORT_PAGE_0.5,
+                DELTA_SHORT_BANK_0.5, DELTA_FULL_1.0,
+                SAME_CYCLE_RELEASE, CHECKPOINT_MISSING,
+                LEDGER_TRUNCATED, REPORT_OVERFLOW]
+    transport_delay: [4096]
+  late:
+    workloads: [W2, W4_F1, W4_F4, W4_F16]
+    n_tiles: [32]
+    ratios: [0.1, 0.5, 1.0, 2.0, 3.0]
+    policies: [B0, B1, Oracle]
+    window_mode: [AUTO, DELTA]
+  ledger:
+    workloads: [W1, W2, W3_K4, W3_K16]
+    n_tiles: [8, 32, 128]
+assumed:
+  - MUL and RELU reuse the ADD tile cost in L2 until the v2.1 L3 calibration.
+  - W4's K2 per-tile cost is ASSUMED to equal the MUL cost.
+  - MIX-A/MIX-B silent-distance distributions are illustrative, not measured.
+  - The host consumer reads only final outputs and cannot read during PIM mode.

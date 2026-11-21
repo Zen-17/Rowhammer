@@ -1,0 +1,20 @@
+{
+  "by_kind": {
+    "ledger": 36,
+    "main": 45360,
+    "radius": 900,
+    "release": 2160,
+    "status": 210
+  },
+  "cases": 48666,
+  "correct": 45960,
+  "incorrect": 510,
+  "jobs": 112,
+  "status_counts": {
+    "OUTSIDE_WINDOW_NO_TRUSTED_INPUT": 30,
+    "PARTIAL_WITH_ESCAPE": 30,
+    "SELECTIVE_RECOVERED": 21480,
+    "SOURCE_REPAIRED_ONLY": 13350,
+    "WHOLE_JOB_FALLBACK": 11580
+  }
+}

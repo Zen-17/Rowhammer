@@ -1,0 +1,49 @@
+schema_version: 1
+description: >
+  Phase 2 L3 end-to-end suite.  E2E-0..E2E-7 are the acceptance cases from the
+  plan; the sweep follows section 8.5.  Every run writes params.ini,
+  metrics.json, reports.csv, ledger.csv, layout.csv, decision.json (when a
+  report triggers recovery), decision_inputs.json, output.bin, reference.bin,
+  validation.json, stdout.log, stderr.log and exit_code.
+calibration: configs/phase2/calibration.json
+e2e:
+  workload: [W1, W2]
+  n_tiles: [8, 32]
+  granularity: page
+  transport_delay: 1024
+  fault_operand_A: 0
+  fault_operand_T: 3
+  fault_tile: [0, 3, 7]
+  policy_B0: B0
+  policy_B1: B1
+  policy_B2: B2
+  f1: F1
+  f2: F2
+  checkpoint_tile: 3
+  w2_tile: 2
+sweep:
+  workloads: [W1, W2]
+  n_tiles: [8, 32]
+  granularity: [bank, page]
+  fault_kind: [F1, F2]
+  fault_tile_positions: [first, middle, last]
+  policies: [B0, B1, B2]
+  fault_operand: 0
+  transport_delay: 1024
+  seeds:
+    start: 0
+    stop: 5
+common:
+  service_interval: 1
+  capacity: 64
+  handler_delay: 0
+  fault_bank: 0
+  radius_rows: 0
+  watchdog_cycles: 2000000
+  max_log_entries: 1000000
+  release: GLOBAL_HOLD
+  hold_cycles: 0
+  accounting: ON
+  observer: ON
+  kernel_mode: tiles
+  negative_control: NONE

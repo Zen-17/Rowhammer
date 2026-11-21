@@ -1,0 +1,11 @@
+{
+  "fit_mape_percent": 16.293566666666674,
+  "fit_parameters": {
+    "c_fix": 783.0,
+    "c_tile": 418.375
+  },
+  "fit_rows": 60,
+  "note": "W2 validation never participates in the fit; MUL/RELU reuse ADD cost.",
+  "validation_mape_percent": 22.42908333333332,
+  "validation_rows": 60
+}

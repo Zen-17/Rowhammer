@@ -1,0 +1,3 @@
+P2F1=7560 P2F2=2160 P2F3=1560 P2F4=900 P2F5=210 T1=36
+COUNTS={"ledger": 36, "main": 45360, "radius": 900, "release": 1440, "status": 210}
+AGGREGATE=PASS

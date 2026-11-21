@@ -1,0 +1,23 @@
+{
+  "fit_points": [
+    {
+      "n_tiles": 8,
+      "producer_cycles": 4130.0
+    },
+    {
+      "n_tiles": 32,
+      "producer_cycles": 14171.0
+    }
+  ],
+  "parameters": {
+    "c_fix": 783.0,
+    "c_tile": 418.375
+  },
+  "residuals": {
+    "n_tiles_32": 0.0,
+    "n_tiles_8": 0.0
+  },
+  "schema_version": 1,
+  "source": "Phase 2 L3 E2E-0 no-fault W1 runs",
+  "validation": "W2 sweep runs, never used in the fit"
+}

@@ -1,0 +1,8 @@
+figure,workload,n_tiles,granularity,error_class,policy,seed,fault_tile,recovery_cycles,source
+P2-F2,W1,8,page,UE,B1,0,0,4122,L3
+P2-F2,W1,8,page,UE,B1,1,3,2986,L3
+P2-F2,W1,8,page,UE,B1,2,7,1084,L3
+P2-F2,W1,8,page,UE,B0,0,0,8638,L3
+P2-F2,W1,8,page,UE,B0,1,3,8368,L3
+P2-F2,W1,8,page,UE,B0,2,7,8447,L3
+P2-F2,W1,8,page,CE,B2,0,3,2182,L3
