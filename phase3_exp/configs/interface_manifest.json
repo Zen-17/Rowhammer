@@ -1,0 +1,69 @@
+{
+  "git_commit": "bd6b99c0ac428927b01a931e61f900fe9cffaa4b",
+  "device_ini_sha256": "a770f3d6e1347eef0396d438859e84b7b32001dab5513e662f9bb24e4e6a3ecd",
+  "locked_params_sha256": "22cff5f4f2aecaffe6fb85ad7099eeddc430650c159465d7a3b46d565a192bce",
+  "ini_check": "PASS",
+  "ini": {
+    "NUM_BANKS": 16,
+    "NUM_ROWS": 16384,
+    "tRC": 47,
+    "tREFI": 3900,
+    "tCK": 1
+  },
+  "interfaces": {
+    "activate_and_ab_mode": {
+      "path": "pim-phase1/simulator/src/Rank.cpp",
+      "line": 205,
+      "signature": "void Rank::updateState(BusPacket* packet)"
+    },
+    "bank_update": {
+      "path": "pim-phase1/simulator/src/Rank.cpp",
+      "line": 233,
+      "signature": "void Rank::updateBank(BusPacketType type, int bank, int row, bool targetBank, bool targetBankgroup)"
+    },
+    "refresh_command": {
+      "path": "pim-phase1/simulator/src/Rank.cpp",
+      "line": 462,
+      "signature": "case REF:"
+    },
+    "inject_data": {
+      "path": "pim-phase1/simulator/src/Phase1Storage.h",
+      "line": 53,
+      "signature": "void injectDataBit(const Phase1StorageKey& key, unsigned bit)"
+    },
+    "inject_parity": {
+      "path": "pim-phase1/simulator/src/Phase1Storage.h",
+      "line": 54,
+      "signature": "void injectParityBit(const Phase1StorageKey& key, unsigned bit)"
+    },
+    "report_queue": {
+      "path": "pim-phase1/simulator/src/Phase1Reports.h",
+      "line": 60,
+      "signature": "class Phase1Reports"
+    },
+    "b2_recovery": {
+      "path": "pim-phase2/overlay/src/Phase2Engine.h",
+      "line": 23,
+      "signature": "Decision analyze(const Phase1PublicReport& report, uint64_t t_ack,"
+    },
+    "plot_input": {
+      "path": "pim-phase1/scripts/plot_paper.py",
+      "line": 47,
+      "signature": "def read_csv(path: Path)"
+    }
+  },
+  "differences": [
+    {
+      "item": "refresh_row_pointer",
+      "mark": "ASSUMED",
+      "fact": "Rank::updateState on REF only advances nextActivate by tRFC for every bank. refreshCount increments in Rank::receiveFromBus. No row pointer exists.",
+      "phase3": "ActivationObserver keeps a side pointer and retires two rows per observed REF. It does not change the controller."
+    },
+    {
+      "item": "W4_fanout",
+      "mark": "ASSUMED",
+      "fact": "The playbook names W4 as fan-out and does not lock the factor. Phase 2 measured W4_F16.",
+      "phase3": "W4 is locked at fan-out 16."
+    }
+  ]
+}

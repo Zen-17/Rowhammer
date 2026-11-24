@@ -210,8 +210,10 @@ bool CommandQueue::process_command(BusPacket** busPacket)
 {
     unsigned startingRank = nextRank;
     unsigned startingBank = nextBank;
-    // if(refreshWaiting)
-    //         return false;
+    // A due refresh must PRE open rows and issue REF before another ACT or
+    // row hit.  Those commands push nextPrecharge forward and starve REF.
+    if (refreshWaiting)
+        return false;
     do
     {
         vector<BusPacket*>& queue = getCommandQueue(nextRank, nextBank);

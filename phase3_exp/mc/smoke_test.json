@@ -1,0 +1,22 @@
+{
+  "a3_max_share": 0.0595703125,
+  "acts_per_ref": 75,
+  "attack": "A1",
+  "c": 2.0,
+  "censored_flip": 1000,
+  "g": 1.5,
+  "model": "window_level_mc_abstraction",
+  "monotonic": true,
+  "mttf_flip_mean": 614400.0,
+  "mttf_flip_mean_r1_20000": 102907.11,
+  "mttf_flip_mean_r1_75": 614400.0,
+  "mttf_sdc_mean": 614400.0,
+  "n": 64,
+  "r0": 954,
+  "r1": 75,
+  "refresh_acts": 614400,
+  "reproducible": true,
+  "scheme": "FIX",
+  "seed0": 20260000,
+  "trials": 1000
+}

@@ -1,0 +1,12 @@
+{
+  "name": "W2",
+  "kind": "eltwise",
+  "n_tiles": 48,
+  "dim_per_tile": 128,
+  "host_bw_share": 0.2,
+  "kernels": [
+    {"op": "ADD", "in0": 0, "result": 256, "in1": 128},
+    {"op": "MUL", "in0": 256, "result": 512, "in1": 384},
+    {"op": "RELU", "in0": 512, "result": 640, "in1": 0}
+  ]
+}

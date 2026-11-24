@@ -1,0 +1,14 @@
+{
+  "name": "DEC",
+  "kind": "dec",
+  "host_bw_share": 0.2,
+  "gemv_count": 3,
+  "weight_shape": [256, 128],
+  "input_shape": [1, 128],
+  "is_tree": false,
+  "residual": {"op": "ADD", "in0": 2000, "result": 2256, "in1": 2128},
+  "relu": {"op": "RELU", "in0": 2256, "result": 2384, "in1": 0},
+  "n_tiles": 1,
+  "dim_per_tile": 128,
+  "composition_note": "ASSUMED: 3 x executeGemv, residual ADD, RELU"
+}

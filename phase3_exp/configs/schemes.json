@@ -1,0 +1,16 @@
+{
+  "order": ["NONE", "REACT", "PARA", "FIX", "ADA", "OURS", "OURS-CE", "OURS-SCRUB", "OURS-EPOCH", "OURS-G1.5", "OURS-DET"],
+  "schemes": {
+    "NONE": {"prevention": false, "g": null, "ce_feedback": false, "scrub": false, "epoch_check": false, "detector": false, "recovery": false},
+    "REACT": {"prevention": false, "g": null, "ce_feedback": false, "scrub": false, "epoch_check": false, "detector": false, "recovery": true},
+    "PARA": {"prevention": "probabilistic_neighbor_refresh", "g": null, "ce_feedback": false, "scrub": false, "epoch_check": false, "detector": false, "recovery": true, "p": null, "p_note": "unset until the post-E2 binary search"},
+    "FIX": {"prevention": "fixed_r1", "g": 1.5, "ce_feedback": false, "scrub": true, "epoch_check": true, "detector": false, "recovery": false},
+    "ADA": {"prevention": "adaptive", "g": 1.5, "ce_feedback": false, "scrub": true, "epoch_check": true, "detector": true, "recovery": false},
+    "OURS": {"prevention": "adaptive", "g": 1.1, "ce_feedback": true, "scrub": true, "epoch_check": true, "detector": true, "recovery": true},
+    "OURS-CE": {"prevention": "adaptive", "g": 1.1, "ce_feedback": false, "scrub": true, "epoch_check": true, "detector": true, "recovery": true},
+    "OURS-SCRUB": {"prevention": "adaptive", "g": 1.1, "ce_feedback": true, "scrub": false, "epoch_check": true, "detector": true, "recovery": true},
+    "OURS-EPOCH": {"prevention": "adaptive", "g": 1.1, "ce_feedback": true, "scrub": true, "epoch_check": false, "epoch_mode": "corrupt", "detector": true, "recovery": true},
+    "OURS-G1.5": {"prevention": "adaptive", "g": 1.5, "ce_feedback": true, "scrub": true, "epoch_check": true, "detector": true, "recovery": true},
+    "OURS-DET": {"prevention": "fixed_r0", "g": 1.1, "ce_feedback": true, "scrub": true, "epoch_check": true, "detector": false, "recovery": true}
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "locked": true,
+  "n": 64,
+  "c": 2.0,
+  "g_fix_ada": 1.5,
+  "g_ours": 1.1,
+  "r0_g15": 954,
+  "r1_g15": 75,
+  "r0_g11": 1395,
+  "r1_g11": 103,
+  "f_th": 0.0625,
+  "e_det": 1024,
+  "hc_min": 14531,
+  "refresh_acts": 614400,
+  "trials": 1000,
+  "git_commit": "bd6b99c0ac428927b01a931e61f900fe9cffaa4b"
+}

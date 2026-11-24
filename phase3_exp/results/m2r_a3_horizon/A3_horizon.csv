@@ -1,0 +1,5 @@
+scheme,attack,seed,status,cycles,attack_transactions,attack_acts,neighbor_acts,refresh_commands,victim_refreshes,injections,first_crossings,residual_flips,peak_ratio,swaps,swap_acts,swap_clears,swap_clears_bank0,window_attacks,window_acts,window_neighbor_acts,window_injections,window_refreshes,window_peak_ratio,max_refresh_wait
+ADA,A3,20261122,SUCCESS,33219655,600329,1203994,1920,8504,1,0,0,0,0.0360305,1261,40352,39613,2436,578614,1160232,1811,0,8192,0.0360305,34
+FIX,A3,20261122,SUCCESS,33235740,559706,1152895,1080,8508,2,0,0,0,0.0610943,15378,491840,487077,30131,539232,1110501,651,0,8192,0.0610943,34
+NONE,A3,20261122,SUCCESS,33219650,603457,1207136,70996,8504,2,0,0,0,0.726091,0,0,0,0,581632,1163264,68428,0,8192,0.726091,32
+OURS,A3,20261122,SUCCESS,33219650,601317,1204984,2798,8504,1,0,0,0,0.0604021,862,27584,27058,1674,579566,1161187,2635,0,8192,0.0604021,34

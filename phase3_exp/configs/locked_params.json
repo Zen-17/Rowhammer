@@ -1,0 +1,71 @@
+{
+  "source": "phase3_experiment_execution_playbook.md section 1",
+  "platform": {
+    "device_ini": "pim-phase1/simulator/ini/HBM2_samsung_2M_16B_x64.ini",
+    "num_banks": 16,
+    "num_rows": 16384,
+    "tRC_ns": 47,
+    "tREFI_ns": 3900,
+    "tRFC_ns": 350,
+    "tCK_ns": 1,
+    "tREFW_ns": 32000000,
+    "refs_per_command": 2,
+    "refresh_pointer": "ASSUMED side model; Rank REF does not name a row"
+  },
+  "fault": {
+    "hc_first_min": 14531,
+    "hc_first_distribution": "truncated_lognormal",
+    "hc_first_median_factor": 1.35,
+    "hc_first_sigma": 0.25,
+    "hc_first_note": "ASSUMED shape. Untruncated median is 1.35 * hc_first_min; draws below the floor are rejected.",
+    "multipliers": {"1": 1.0, "2": 1.19, "4": 1.41, "8": 1.66, "10": 1.76},
+    "interpolated_bits": [3, 5, 6, 7, 9],
+    "flip_rule": "D(v) >= 2 * m_k * HC_first(v)",
+    "vrd_low": 1.0,
+    "vrd_high": 3.5,
+    "vrd_note": "ASSUMED Uniform(1.0, 3.5). Effective threshold is alpha * HC_first, already at or above hc_first_min.",
+    "trr": "absent",
+    "inject": "uniform codeword and bit among written words; data:parity = 64:8; repeat hits add no new flip"
+  },
+  "prevention": {
+    "n": 64,
+    "regions_per_bank": 256,
+    "key_bits": 6,
+    "detector_k": 15,
+    "E_det": 1024,
+    "f_th": 0.0625,
+    "c_initial": 2.0,
+    "spare_rows_per_bank": 16,
+    "spare_rows_note": "ASSUMED default pool size",
+    "groups": {
+      "FIX": {"g": 1.5, "r1_real": 75, "r0_real": 954},
+      "ADA": {"g": 1.5, "r1_real": 75, "r0_real": 954},
+      "OURS": {"g": 1.1, "r1_real": 103, "r0_real": 1395}
+    },
+    "scale_1_16": 0.0625,
+    "scale_rule": "hc_first_min, r1, r0, and E_det are multiplied by the scale and floored, minimum 1"
+  },
+  "traffic": {
+    "attack_bw_share": 0.5,
+    "attack_bw_note": "ASSUMED default intensity",
+    "host_bg_bw_share": 0.2,
+    "host_bg_note": "ASSUMED uniform host stream, alternating with each PIM kernel in the feeder FIFO",
+    "host_row_space": "rows with PIM reserved-RA bit 13 clear, i.e. 0..8191"
+  },
+  "workloads": {
+    "W4_fanout": 16,
+    "W4_note": "ASSUMED. The playbook names fan-out but not the factor. Locked to the Phase 2 W4_F16 stress point.",
+    "DEC": ["GEMV", "GEMV", "GEMV", "ADD", "RELU"],
+    "DEC_note": "ASSUMED composition: 3 x executeGemv, residual ADD, RELU"
+  },
+  "seeds": {
+    "MC_BASE_SEED": 20260000,
+    "SIM_BASE_SEED": 20261122,
+    "streams": ["hc_first", "vrd", "flip_pos", "para"]
+  },
+  "stats": {
+    "wilson_z": 1.959964,
+    "zero_escape_upper": "3/N"
+  },
+  "hbm3_e5_cells": {"workload": "DEC", "attacks": ["A1", "A3"], "schemes": ["ADA", "OURS"]}
+}

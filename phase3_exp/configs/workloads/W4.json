@@ -1,0 +1,12 @@
+{
+  "name": "W4",
+  "kind": "fanout",
+  "n_tiles": 1,
+  "dim_per_tile": 128,
+  "fanout": 16,
+  "fanout_note": "ASSUMED lock to Phase 2 W4_F16",
+  "host_bw_share": 0.2,
+  "add": {"op": "ADD", "in0": 0, "result": 256, "in1": 128},
+  "mul_base_row": 384,
+  "row_stride": 128
+}

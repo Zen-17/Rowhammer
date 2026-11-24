@@ -1,0 +1,8 @@
+{
+  "name": "W1",
+  "kind": "eltwise",
+  "n_tiles": 128,
+  "dim_per_tile": 128,
+  "host_bw_share": 0.2,
+  "kernels": [{"op": "ADD", "in0": 0, "result": 256, "in1": 128}]
+}

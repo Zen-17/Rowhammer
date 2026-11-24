@@ -1,0 +1,340 @@
+[
+  {
+    "figure": "fig2a_e1_benign",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E1_benign_profile.csv",
+        "sha256": "a75eeb7af56676cde3b1db32f1bfd4162a3cd1c1e215f428c3f03641b1fbd77a"
+      }
+    ],
+    "filters": {
+      "panel": "a",
+      "attack": "NO_ATK",
+      "guides": {
+        "f_th": 0.0625,
+        "g1": 0.02
+      }
+    },
+    "sample_count": 10,
+    "aggregation": "worst complete-window f_max, streaming beside reuse",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2a_e1_benign.pdf",
+        "sha256": "dc7e2547fbd26c54d08b094dc6ddbf16ffe225aa94531ce7f95a66491f8f08ce"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2a_e1_benign.svg",
+        "sha256": "a7828d606e8d28597f13480f196d1ab527941b378c77cae304b59ac3c815440b"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2a_e1_benign.png",
+        "sha256": "ad446a37d8349aaa456ffda38bf02d2ff772d7c44a65e5a5dd8048b7daffb3cb"
+      }
+    ],
+    "caption": "Fig. 2(a). Hottest-row share f_max of the worst complete 1024-ACT window under no attack. Streaming and reuse are the two bars of each workload. The axis breaks above 0.07 so the W4 reuse bar can continue to its measured value. Dashed line is f_th = 1/16; dotted line is the G1 reference 0.02. Partial tails are omitted. Attack panels are not drawn."
+  },
+  {
+    "figure": "fig2_e1_characterization",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E1_benign_profile.csv",
+        "sha256": "a75eeb7af56676cde3b1db32f1bfd4162a3cd1c1e215f428c3f03641b1fbd77a"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E1_attack_flips.csv",
+        "sha256": "56458b1a9b49bfe6a1005942b2a24eb80ff2d61838da08bfe56d9e8268118bac"
+      }
+    ],
+    "filters": {
+      "panels": [
+        "a",
+        "b",
+        "c"
+      ],
+      "attack": "A1 x NONE",
+      "f_th": 0.0625
+    },
+    "sample_count": 8,
+    "aggregation": "one A1 x NONE trace per threshold; worst complete-window f_max",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2_e1_characterization.pdf",
+        "sha256": "99ffad602bb8cb0ecbcfcba3db649df9827876ef03b1c0a413b685d678c19191"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2_e1_characterization.svg",
+        "sha256": "664a5890f2c835c56f75531ef56ae280f296a59ace625779262f3c342bb6d1fe"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig2_e1_characterization.png",
+        "sha256": "3eb707c52530bcb952fd00d02b24b6d2fd8a0afc4476cfcd534ca416eed7ae47"
+      }
+    ],
+    "caption": "Fig. 2. (a) Hottest-row share f_max of the worst complete 1024-ACT window under no attack. Streaming and reuse are adjacent bars. The axis breaks above 0.07 so the W4 reuse bar stays visible. The dashed line is f_th = 0.0625 and the dotted line is 0.02; neither is in the legend. (b) Cumulative flips for A1 x NONE at the real 14.5K threshold. (c) The same curve at the 1/16 threshold, drawn on its own axes."
+  },
+  {
+    "figure": "fig4_e2_mttf_heatmap",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E2_mc_security.csv",
+        "sha256": "9476c9efaacd803f7dc7bd4b99dcf0ddaf24021c414f2eb00f851cc66f3e96eb"
+      }
+    ],
+    "filters": {
+      "design_point": {
+        "n": 64,
+        "c": 2
+      },
+      "value": "min MTTF_flip over A1-A4"
+    },
+    "sample_count": 864,
+    "aggregation": "minimum MTTF_flip across A1-A4, 1000 trials",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4_e2_mttf_heatmap.pdf",
+        "sha256": "1aaa3e18954effa07bd7dd828814d00a78aa6f69c8270901ff334ddc8faf3e4e"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4_e2_mttf_heatmap.svg",
+        "sha256": "1ec171e50402f7d1abb18de2e3f97dc48ad350e1987153190c0a814c28f22808"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4_e2_mttf_heatmap.png",
+        "sha256": "9c667d891ad9023bb257731e0fcd8690b485ed9ccccce61672c17a3f374a1f84"
+      }
+    ],
+    "caption": "Fig. 4. Monte Carlo MTTF to the first flip. Color is log10 of the worst attack. The open circle is the design point n=64, c=2. g=1.5 is FIX and ADA; g=1.1 is the OURS margin."
+  },
+  {
+    "figure": "fig3_e3_attack_timeline",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E3_prevention_timeline.csv",
+        "sha256": "89903f2e5fff99d92ea26d47f4ba4eee542aa5f0393350278970c7d8c0ed968a"
+      }
+    ],
+    "filters": {
+      "attack": "A1",
+      "index": 0,
+      "panels": [
+        "1/16",
+        "14.5K"
+      ]
+    },
+    "sample_count": 4536,
+    "aggregation": "one A1 trace per scheme and threshold; other attacks stay in the CSV",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig3_e3_attack_timeline.pdf",
+        "sha256": "14fef452d2d5466778df77d9ed5624f4eb79bdb678268d18a44cba75e0d2a232"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig3_e3_attack_timeline.svg",
+        "sha256": "272670ea2daacb9ca8ad3b1ba4553868b142e26502f266ba01a89c8886cb89d2"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig3_e3_attack_timeline.png",
+        "sha256": "86956acdf68dad593760f6443b5f1914626be97d38ccabba24055e4eb8d27bc4"
+      }
+    ],
+    "caption": "Fig. 3. Cumulative flips under A1 on W2. The 1/16 threshold and the real 14.5K threshold are separate panels. FIX and ADA stay at zero flips. OURS is the preview without CE feedback."
+  },
+  {
+    "figure": "fig5_e4_overhead_vs_hc",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/E4_overhead_scaling.csv",
+        "sha256": "8cab4f89213d8c31ea88a96597ee5db539d9b41cd959c37812c612d90d24878a"
+      }
+    ],
+    "filters": {
+      "device": "HBM2",
+      "workload": "W2",
+      "r1_eq_10": {
+        "g1.5": 1920,
+        "g1.1": 1408
+      }
+    },
+    "sample_count": 40,
+    "aggregation": "mean is not pooled; each point is the W2 scan run at that HC",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5_e4_overhead_vs_hc.pdf",
+        "sha256": "f30df25729b321243915f813005d196bfaa8fbc0dc4c02fe2927452a2b1727c0"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5_e4_overhead_vs_hc.svg",
+        "sha256": "1bafddf8ce2dc473e5191a36b094925350ec69bb5bc3ed7723986c854cd3e41d"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5_e4_overhead_vs_hc.png",
+        "sha256": "a2ac1bb0eb299a5c4420ef0834bc912a079833bb35d19a06c63a8fd5bd7fc995"
+      }
+    ],
+    "caption": "Fig. 5. W2 cycle overhead against the no-defense run as the flip threshold falls. Only HBM2 is drawn. Dashed lines are the HC values where r1 reaches 10, from r1 = floor((HC/g)/(c*n)) with c=2 and n=64."
+  },
+  {
+    "figure": "fig4r_e2_disturbance_margin",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m2r/E2_security.csv",
+        "sha256": "7f969a33b20654407a6adf9e008c6cd5f608391cb595a9eb4e745355ca397dfb"
+      }
+    ],
+    "filters": {
+      "value": "max max_ratio_max over A1-A4",
+      "p_flip": 0,
+      "design_point": {
+        "n": 64,
+        "c": 2
+      }
+    },
+    "sample_count": 864,
+    "aggregation": "maximum epoch upper bound across A1-A4, 200 trials, P_flip=0",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_disturbance_margin.pdf",
+        "sha256": "2c53dae80fdd98efcc6d42069b6dcfff41c786f0f3ea1ccab6c3795dd6b886b0"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_disturbance_margin.svg",
+        "sha256": "a6262bdb6e128b4e8b7ee8566202c2578170d8a7afff6e6fd0b6a268560ea811"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_disturbance_margin.png",
+        "sha256": "3b9b4c1e71319fc9eca00b91010048f5662f77dcd52b45e4ccf7ee8ab0013472"
+      }
+    ],
+    "caption": "Fig. 4r. Upper bound on D(v) divided by the first-flip threshold. Every protected trial is right-censored, so the color is not a time-to-flip. The open circle is n=64, c=2. A bound of 1 means one swap epoch can reach the threshold."
+  },
+  {
+    "figure": "fig4r_e2_none_pflip",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m2r/E2_security.csv",
+        "sha256": "7f969a33b20654407a6adf9e008c6cd5f608391cb595a9eb4e745355ca397dfb"
+      }
+    ],
+    "filters": {
+      "scheme": "NONE",
+      "trials": 200,
+      "interval": "Wilson 95%"
+    },
+    "sample_count": 16,
+    "aggregation": "flip count / 200, Wilson interval from harness.stats",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_none_pflip.pdf",
+        "sha256": "cfafb74ec8c0af5245205abb60818e4c85d73e59da7588d8026bb4eed8546a0c"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_none_pflip.svg",
+        "sha256": "1599b0bdcb5bbd55df5beea2fac78ef1a694e6509d21f524346074906d8d8f7d"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig4r_e2_none_pflip.png",
+        "sha256": "346c3a5b789bef1daa0c8e1f8623be4de8e6e3c2de8fa0bcf2b5bb6eda717462"
+      }
+    ],
+    "caption": "Fig. 4r none. Unprotected flip rate inside one refresh window. Bars are observed P_flip. Whiskers are the 95% Wilson interval. A missing bar is a right-censored cell, not a failure at the horizon."
+  },
+  {
+    "figure": "fig5r_e4_sustained_overhead",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m2r/E4_overhead.csv",
+        "sha256": "8f4ca6a909a1743f3f89509d3943e72928ec49b20b40e0d9fd0e33eeccecd656"
+      }
+    ],
+    "filters": {
+      "timing": "v1 measured 4-burst",
+      "fill_mov": "not plotted",
+      "hbm3": "MISSING"
+    },
+    "sample_count": 60,
+    "aggregation": "mean of two runs, overhead versus NONE of the same workload and access mode",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5r_e4_sustained_overhead.pdf",
+        "sha256": "c082683ae26374c8beb223f2c49a064e64188ce970d57a26244098b124e2ac67"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5r_e4_sustained_overhead.svg",
+        "sha256": "a399c67b91d31e139e9219526e483fbe1f389ca934bab90b7d9fdcd0ac281c7e"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig5r_e4_sustained_overhead.png",
+        "sha256": "c110f811f4a21eba9a592554746d099b8021cb3efd7cac11a03b30a0f25cc669"
+      }
+    ],
+    "caption": "Fig. 5r. Measured v1 swap overhead on repeated W2, GEMV, and DEC. Streaming and reuse are separate panels. The FILL/MOV cycle estimate is not drawn."
+  },
+  {
+    "figure": "fig3r_e3_injections",
+    "inputs": [
+      {
+        "path": "phase3_exp/results/m2r_g3_seeds/E3_multiseed.csv",
+        "sha256": "9d786a14d75ea55b445b4ba46948555b2da22769b5bdfa16f988e7a3b74cc712"
+      },
+      {
+        "path": "phase3_exp/results/m2r_a3_horizon/A3_horizon.csv",
+        "sha256": "d2cab329f47f7a9872332dcd6ee6cb0c363172d17fa864b56b02cd485da281d8"
+      }
+    ],
+    "filters": {
+      "refresh": "on",
+      "workload": "W2",
+      "hc": 14531,
+      "a3": "one victim refresh period"
+    },
+    "sample_count": 52,
+    "aggregation": "A1/A2/A4: 4 seeds; A3*: one seed over 8192 REFs after the victim refresh",
+    "outputs": [
+      {
+        "path": "phase3_exp/figures/fig3r_e3_injections.pdf",
+        "sha256": "33bc67efbe946433cb530689e89a7625dd5b336c30b63e3b2b865937c8b4276a"
+      },
+      {
+        "path": "phase3_exp/figures/fig3r_e3_injections.svg",
+        "sha256": "1fbf8cd5b303998e20d4118caaaa2ce4f5f3c21e1882e80dc40f30c22ff53d97"
+      },
+      {
+        "path": "phase3_exp/figures/fig3r_e3_injections.png",
+        "sha256": "992504430629f081080fd5cca453774995709e6b7e61c6df0a5ed966e3737f96"
+      }
+    ],
+    "caption": "Fig. 3r. Real-threshold W2 after the refresh fix. (a) Fraction of runs with at least one injection. Labels are the NONE counts. FIX, ADA, and OURS are 0/4 on A1, A2, and A4, and 0/1 on A3*. (b) Mean peak disturbance of the logical victim divided by its threshold. A3* is one victim-row refresh period, not the 1024-access definition. A2 injections land on other hammered rows, so a victim bar below the threshold can still have injections."
+  },
+  {
+    "figure": "fig3s_swap_sensitivity",
+    "inputs": [
+      {
+        "path": "phase3_exp/results/m2r_swap_sensitivity/A1_swap_sensitivity.csv",
+        "sha256": "556805743dacb266311a8f2056d8b80d7b743fede1fbc84c3fcb0c0e9460b27a"
+      }
+    ],
+    "filters": {
+      "attack": "A1",
+      "refresh": "on",
+      "hc": 14531,
+      "hatched": "command-only swap accounting"
+    },
+    "sample_count": 16,
+    "aggregation": "one run per scheme, seed, and swap accounting; label is the injection count when nonzero",
+    "outputs": [
+      {
+        "path": "phase3_exp/figures/fig3s_swap_sensitivity.pdf",
+        "sha256": "780aa42638a66b14c2530dc8e4eceb5dffaf38ee8275c50c64be1f00ba2625b8"
+      },
+      {
+        "path": "phase3_exp/figures/fig3s_swap_sensitivity.svg",
+        "sha256": "e04edeb88b7c6ddc325f4d69d31412aeb5f4b65c4fdff85a5efd7bde4065ec14"
+      },
+      {
+        "path": "phase3_exp/figures/fig3s_swap_sensitivity.png",
+        "sha256": "fb53e9bec1e65cec71c26381e0ee8c02a8512187061ca0bcc9ac9055004493d8"
+      }
+    ],
+    "caption": "Fig. 3s. A1 sensitivity at the real threshold. Solid bars keep the v1 swap disturbance update. Hatched bars leave D unchanged at noteSwap and count only command-bus activations. The number above a bar is the injection count."
+  }
+]

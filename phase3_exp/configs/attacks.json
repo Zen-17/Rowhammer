@@ -1,0 +1,11 @@
+{
+  "intensity_bw_share": 0.5,
+  "knowledge": "current mapping known, future keys unknown",
+  "attacks": {
+    "NO_ATK": "host background only",
+    "A1": "double-sided hammer of the current physical neighbors of one victim",
+    "A2": "eight double-sided pairs, round robin",
+    "A3": "at least 17 aggressor rows, each under f_th inside every E_det window",
+    "A4": "follow the swap pointer so swap-induced activations stack on one victim"
+  }
+}

@@ -3,13 +3,32 @@ pim-phase1/.venv/
 pim-phase1/.pytest_cache/
 **/__pycache__/
 *.py[cod]
+.pytest_cache/
+.venv/
 
-# Experiment outputs
+# Experiment runs and logs
 pim-phase1/runs/
 pim-phase1/logs/
+**/runs/
+**/logs/
+
+# Archives and compressed artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
+*.xz
+*.gz
 
 # Simulator build artifacts and large input data
 pim-phase1/simulator/bin/
 pim-phase1/simulator/sim
 pim-phase1/simulator/.sconsign.dblite
 pim-phase1/simulator/data/
+
+# Phase 3 caches, local tools, and simulator build artifacts
+phase3_exp/build/
+phase3_exp/.tools/

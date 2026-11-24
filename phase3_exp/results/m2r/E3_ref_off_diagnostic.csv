@@ -1,0 +1,5 @@
+git_commit,seed,status,workload,scheme,attack,refresh_mode,access_mode,repeats,scale,hc,index,cycles,pim_items,attack_transactions,attack_acts,kernel_acts,total_acts,refresh_commands,injections,first_crossings,scrub_corrections,residual_flips,swaps,swap_acts,neighbor_acts,peak_ratio,host_read_mean,host_read_p99,mapping_epoch,level
+bd6b99c0ac428927b01a931e61f900fe9cffaa4b,1775150320,SUCCESS,W2,NONE,A1,off,reuse,1,0.0625,908.188,0,216162,7059,5661,5879,6185,12064,42,2,1,0,2,0,0,924,0,38,38,0,0
+bd6b99c0ac428927b01a931e61f900fe9cffaa4b,1978093768,SUCCESS,W2,FIX,A1,off,reuse,1,0.0625,908.188,0,602510,7059,7705,8031,6569,14600,133,0,0,0,0,2268,66432,150,0,1174.74,2587,61,0
+bd6b99c0ac428927b01a931e61f900fe9cffaa4b,340573236,SUCCESS,W2,NONE,A1,off,reuse,1,1,14531,0,2290368,7059,87381,87599,6185,93784,574,2,1,0,2,0,0,14221,0,38,38,0,0
+bd6b99c0ac428927b01a931e61f900fe9cffaa4b,275904540,SUCCESS,W2,FIX,A1,off,reuse,1,1,14531,0,2580089,7059,95191,95415,6201,101616,648,0,0,0,0,1280,40704,659,0,523.464,1125,39,0
