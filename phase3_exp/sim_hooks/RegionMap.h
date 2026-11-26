@@ -9,7 +9,8 @@ class ReadDisturbanceModel;
 
 // Shared XOR region map.  All 16 banks use one pointer and one pair of keys,
 // so an AB activation keeps the same physical row number on every bank.
-// M2 does not feed CE reports, so L1 never steps to L2.
+// M3 feeds a delivered CE back to the logical region.  A second CE on a row
+// that has already been swapped and scrubbed steps that region to L2.
 class RegionMap
 {
   public:
@@ -29,6 +30,13 @@ class RegionMap
     unsigned r0() const { return r0_; }
     unsigned r1() const { return r1_; }
     bool sawL2() const { return sawL2_; }
+    bool ceFeedback() const { return ceFeedback_; }
+    bool scrubEnabled() const { return scrubOn_; }
+    bool epochCorrupt() const { return epochCorrupt_; }
+    bool detectorEnabled() const { return detector_; }
+    bool recoveryEnabled() const { return recovery_; }
+    // A delivered CE report, already translated to the current physical row.
+    void noteCe(unsigned bank, unsigned physicalRow);
 
     struct Transition
     {
@@ -99,6 +107,15 @@ class RegionMap
     double paraP_ = 0;
     bool defer_ = false;
     bool sawL2_ = false;
+    bool ceFeedback_ = false;
+    bool scrubOn_ = true;
+    bool epochCorrupt_ = false;
+    bool detector_ = false;
+    bool recovery_ = false;
+    std::vector<unsigned char> swapped_;
+    std::vector<int> spareOfLogical_;
+    std::vector<int> logicalOfSpare_;
+    unsigned spareUsed_[16] = {};
     std::vector<Transition> transitions_;
     ScrubFn scrub_ = nullptr;
     void* scrubContext_ = nullptr;

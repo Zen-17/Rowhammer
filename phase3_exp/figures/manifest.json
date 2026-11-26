@@ -336,5 +336,105 @@
       }
     ],
     "caption": "Fig. 3s. A1 sensitivity at the real threshold. Solid bars keep the v1 swap disturbance update. Hatched bars leave D unchanged at noteSwap and count only command-bus activations. The number above a bar is the injection count."
+  },
+  {
+    "figure": "fig6_overhead_vs_failure",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m3/E5_campaign_summary.csv",
+        "sha256": "5d5228e4e477a34f516825f1e6120c222d7c99f94601c20907f39f94b1706126"
+      }
+    ],
+    "filters": {
+      "scale": "1/16",
+      "device": "HBM2",
+      "excluded": "14.5K and HBM3"
+    },
+    "sample_count": 4800,
+    "aggregation": "mean cycles and Wilson 95% on the O6 fraction",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig6_overhead_vs_failure.pdf",
+        "sha256": "9c68f7d43e3686b9cfcbf150632b8f32c5cde2136538f7c1bd8082c887e404a8"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig6_overhead_vs_failure.svg",
+        "sha256": "a24e4f7f1bdb253a9b00daea8d5c9119a39df49e3801fe039a0eb6e4d15764b5"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig6_overhead_vs_failure.png",
+        "sha256": "d65c3077f02e4c2290fc4b282a3f49129d2fbd0f007c10bc115a54ed393f63dc"
+      }
+    ],
+    "caption": "Figure 6. O6 fraction against cycle overhead relative to NONE. Columns are attacks and rows are workloads. Whiskers are Wilson 95% intervals. A point with zero escapes is labeled with the 3/N bound. The 14.5K runs are not on this figure."
+  },
+  {
+    "figure": "fig7_e5_throughput",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m3/E5_campaign_summary.csv",
+        "sha256": "5d5228e4e477a34f516825f1e6120c222d7c99f94601c20907f39f94b1706126"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m3/reference_throughput.json",
+        "sha256": "6b54f40a0fe6d685ad0def350b99d7db6df0f4abb99d91446d80ad7b3cfea985"
+      }
+    ],
+    "filters": {
+      "scale": "1/16",
+      "o5_o6": "counted as zero throughput"
+    },
+    "sample_count": 4800,
+    "aggregation": "mean effective throughput, O5 and O6 included as zero",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig7_e5_throughput.pdf",
+        "sha256": "d9150e41e07b32401ae2bded683cdfbfce80e1b80710ec02db11935a540b036c"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig7_e5_throughput.svg",
+        "sha256": "89e5bf782b394415f091c0c9c74788fc5a832b6c465089f93d09cc7254fe1382"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig7_e5_throughput.png",
+        "sha256": "6a7e58d1b05fcf6dae7ce7ffe9d3d2cf1fa47d6e1cd756eb36f9f674652bd07a"
+      }
+    ],
+    "caption": "Figure 7. Released throughput divided by a fault-free NONE run of the same workload. O5 and O6 contribute zero and stay in the mean. The 14.5K runs are not on this figure."
+  },
+  {
+    "figure": "fig_e6_ablation",
+    "inputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m3/E6_ablation.csv",
+        "sha256": "9d82f25e334123bd5e906ae6daf21d8ed98b6a93c0b1ccad2d363d992c062b52"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/results/m3/E5_campaign_summary.csv",
+        "sha256": "5d5228e4e477a34f516825f1e6120c222d7c99f94601c20907f39f94b1706126"
+      }
+    ],
+    "filters": {
+      "workload": "DEC",
+      "attacks": "A1,A3",
+      "scale": "1/16"
+    },
+    "sample_count": 1000,
+    "aggregation": "O6 and O4+O5 fractions; overhead delta annotated against full OURS",
+    "outputs": [
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig_e6_ablation.pdf",
+        "sha256": "2ed23c7451cced07dc88cd16ce137856dffc24ec1f52a178f9bf682b14d07eca"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig_e6_ablation.svg",
+        "sha256": "bf8d5b42875051ef307da5a122e4ed2afa2baca2019e64b72c51afe1b4fd88b0"
+      },
+      {
+        "path": "/opt/data/data/workspace-dynamic/Rowhammer/phase3_exp/figures/fig_e6_ablation.png",
+        "sha256": "ecb2d10f7cd1855b6d09a789faca376e8cd74ac4b74cc3e7d69be9a63bbdcde1"
+      }
+    ],
+    "caption": "Figure E6. Full OURS against the five ablations on DEC. Hatched bars are ablations. The annotation is the cycle-overhead difference from full OURS, not a second axis."
   }
 ]

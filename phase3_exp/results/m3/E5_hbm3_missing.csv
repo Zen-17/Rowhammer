@@ -1,0 +1,5 @@
+workload,scheme,attack,scale,device,status,n_expected,n_success,reason
+DEC,ADA,A1,0.0625,HBM3,MISSING,100,0,no HBM3 ini
+DEC,OURS,A1,0.0625,HBM3,MISSING,300,0,no HBM3 ini
+DEC,ADA,A3,0.0625,HBM3,MISSING,100,0,no HBM3 ini
+DEC,OURS,A3,0.0625,HBM3,MISSING,300,0,no HBM3 ini

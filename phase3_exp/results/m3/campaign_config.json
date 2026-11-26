@@ -1,0 +1,12 @@
+{
+  "para_p_e5": 0.01171875,
+  "para_p_json_unchanged": 0.0625,
+  "scale_main": 0.0625,
+  "refresh": "on",
+  "host_attack_fraction": 0.5,
+  "background_fraction": 0.2,
+  "a3": "every step activates the neighbor outside the victim region; a 16-row scatter stays in that neighbor region and does not train the victim swap",
+  "boundary_victim": "W2 row 768, DEC row 2432",
+  "attack": "outside-region neighbor chase, two waves; swap bytes move in exchangeRows and each pair adds 4*tRC cycles",
+  "hbm3": "MISSING"
+}

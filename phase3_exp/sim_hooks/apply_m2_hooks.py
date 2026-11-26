@@ -107,6 +107,15 @@ def patch_reports_header(text: str) -> str:
 
 
 def patch_reports_cpp(text: str) -> str:
+    if "phase3NoteCe" not in text and "phase3MappingEpoch" in text:
+        anchor = "    item.logical_row = phase3LogicalRow(detection.actual_bank, detection.row);\n"
+        if anchor not in text:
+            raise SystemExit("Phase1Reports.cpp logical-row anchor moved")
+        return text.replace(
+            anchor,
+            anchor + "    if (is_ce)\n        phase3NoteCe(detection.actual_bank, detection.row);\n",
+            1,
+        )
     if "phase3MappingEpoch" in text:
         return text
     if '#include "Phase1Reports.h"\n' not in text:

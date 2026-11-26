@@ -1,0 +1,1 @@
+{"write_while_held":true,"held_host_blocked":true,"held_pim_blocked":true,"unbound_readable":true,"attack_not_gated":true,"published_host":true,"published_pim":true,"poisoned_host_blocked":true,"poisoned_pim_blocked":true,"rewrite_while_poisoned":true,"rewrite_not_consumed":true,"blocked_reads":896}

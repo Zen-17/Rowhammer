@@ -11,6 +11,7 @@ pim-phase1/runs/
 pim-phase1/logs/
 **/runs/
 **/logs/
+*.log
 
 # Archives and compressed artifacts
 *.zip

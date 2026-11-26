@@ -21,13 +21,20 @@ unsigned scaledPeriod(double value)
 
 void RegionMap::configure(const std::string& scheme, double g, double c, double scale)
 {
-    if (scheme != "FIX" && scheme != "ADA" && scheme != "OURS" && scheme != "PARA" && scheme != "NONE")
-        throw std::invalid_argument("region scheme is not one of FIX, ADA, OURS, PARA, NONE");
+    const bool ours = scheme == "OURS" || scheme.compare(0, 5, "OURS-") == 0;
+    if (scheme != "FIX" && scheme != "ADA" && !ours && scheme != "PARA" && scheme != "NONE" &&
+        scheme != "REACT")
+        throw std::invalid_argument("region scheme is not one of FIX, ADA, OURS, PARA, REACT, NONE");
     if (!(scale > 0.0 && scale <= 1.0))
         throw std::invalid_argument("threshold_scale must be in (0, 1]");
     if (g <= 0.0 || c <= 0.0)
         throw std::invalid_argument("g and c must be positive");
-    scheme_ = scheme;
+    scheme_ = ours ? "OURS" : scheme;
+    ceFeedback_ = ours && scheme != "OURS-CE";
+    scrubOn_ = scheme != "OURS-SCRUB";
+    epochCorrupt_ = scheme == "OURS-EPOCH";
+    detector_ = scheme == "ADA" || (ours && scheme != "OURS-DET");
+    recovery_ = scheme == "REACT" || scheme == "PARA" || ours;
     const double hc = kHcMin * scale;
     const double safe = hc / g;
     const unsigned detect = scaledPeriod(static_cast<double>(kDetect) * scale);
@@ -41,6 +48,11 @@ void RegionMap::configure(const std::string& scheme, double g, double c, double 
     paraCommands_ = 0;
     rng_ = 0x9E3779B97F4A7C15ull;
     sawL2_ = false;
+    swapped_.assign(kRows, 0);
+    spareOfLogical_.assign(kRows, -1);
+    logicalOfSpare_.assign(kRows, -1);
+    for (unsigned bank = 0; bank < kBanks; ++bank)
+        spareUsed_[bank] = 0;
     transitions_.clear();
     regions_.assign(kRegions, Region());
     misra_.assign(kBanks, std::vector<Slot>(kMisra));
@@ -58,6 +70,8 @@ unsigned RegionMap::physical(unsigned logicalRow) const
 {
     if (logicalRow >= kRows)
         throw std::out_of_range("logical row is outside the bank");
+    if (!spareOfLogical_.empty() && spareOfLogical_[logicalRow] >= 0)
+        return static_cast<unsigned>(spareOfLogical_[logicalRow]);
     const unsigned region = regionOf(logicalRow);
     return region * kRegion + keyed(regions_[region], offsetOf(logicalRow));
 }
@@ -66,14 +80,29 @@ unsigned RegionMap::logical(unsigned physicalRow) const
 {
     if (physicalRow >= kRows)
         throw std::out_of_range("physical row is outside the bank");
-    const unsigned region = regionOf(physicalRow);
-    const unsigned offset = offsetOf(physicalRow);
-    for (unsigned candidate = 0; candidate < kRegion; ++candidate)
+    unsigned row = 0;
+    if (!logicalOfSpare_.empty() && logicalOfSpare_[physicalRow] >= 0)
+        row = static_cast<unsigned>(logicalOfSpare_[physicalRow]);
+    else
     {
-        if (keyed(regions_[region], candidate) == offset)
-            return region * kRegion + candidate;
+        const unsigned region = regionOf(physicalRow);
+        const unsigned offset = offsetOf(physicalRow);
+        bool found = false;
+        for (unsigned candidate = 0; candidate < kRegion; ++candidate)
+        {
+            if (keyed(regions_[region], candidate) == offset)
+            {
+                row = region * kRegion + candidate;
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            throw std::logic_error("region map has no inverse");
     }
-    throw std::logic_error("region map has no inverse");
+    if (epochCorrupt_)
+        return (row + 1u) % kRows;
+    return row;
 }
 
 unsigned RegionMap::level(unsigned region) const
@@ -90,8 +119,10 @@ unsigned RegionMap::period(unsigned region) const
 {
     if (scheme_ == "FIX")
         return r1_;
-    if (scheme_ == "NONE" || scheme_ == "PARA")
+    if (scheme_ == "NONE" || scheme_ == "PARA" || scheme_ == "REACT")
         return 0;
+    if (scheme_ == "OURS" && !detector_)
+        return r0_;
     return regions_.at(region).level == 0 ? r0_ : r1_;
 }
 
@@ -138,6 +169,10 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
             if (dest != source)
                 model->noteSwap(bank, dest);
         }
+        if (source < swapped_.size())
+            swapped_[source] = 1;
+        if (dest < swapped_.size())
+            swapped_[dest] = 1;
     }
     region.migrated[left] = true;
     region.migrated[right] = true;
@@ -190,7 +225,7 @@ void RegionMap::settleWindows()
                 hotRow = slot.row;
             }
         }
-        if (scheme_ != "FIX" && scheme_ != "NONE" && scheme_ != "PARA" && hotRow >= 0 && hottest > alarmAt_)
+        if (detector_ && hotRow >= 0 && hottest > alarmAt_)
         {
             Region& region = regions_[regionOf(static_cast<unsigned>(hotRow))];
             region.alarmed = true;
@@ -293,14 +328,17 @@ void RegionMap::noteCommand(unsigned row, const unsigned* banks, unsigned nBanks
 
 void RegionMap::flush(ReadDisturbanceModel* model)
 {
-    if (scheme_ == "NONE" || scheme_ == "PARA")
+    if (scheme_ == "NONE" || scheme_ == "PARA" || scheme_ == "REACT")
         return;
     for (unsigned region = 0; region < kRegions; ++region)
     {
-        while (regions_[region].since >= period(region))
+        const unsigned every = period(region);
+        if (every == 0)
+            continue;
+        while (regions_[region].since >= every)
         {
             swapOnce(region, model);
-            regions_[region].since -= period(region);
+            regions_[region].since -= every;
         }
     }
 }
@@ -334,4 +372,65 @@ void RegionMap::noteRefreshWindow()
 void RegionMap::forceSwap(ReadDisturbanceModel* model)
 {
     swapOnce(0, model);
+}
+
+void RegionMap::noteCe(unsigned bank, unsigned physicalRow)
+{
+    if (!ceFeedback_ || bank >= kBanks || physicalRow >= kRows || regions_.empty())
+        return;
+    unsigned owner = 0;
+    bool found = false;
+    if (!logicalOfSpare_.empty() && logicalOfSpare_[physicalRow] >= 0)
+    {
+        owner = static_cast<unsigned>(logicalOfSpare_[physicalRow]);
+        found = true;
+    }
+    else
+    {
+        const unsigned region = regionOf(physicalRow);
+        const unsigned offset = offsetOf(physicalRow);
+        for (unsigned candidate = 0; candidate < kRegion; ++candidate)
+        {
+            if (keyed(regions_[region], candidate) == offset)
+            {
+                owner = region * kRegion + candidate;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found)
+        return;
+    Region& region = regions_[regionOf(owner)];
+    const bool again = physicalRow < swapped_.size() && swapped_[physicalRow] != 0 && region.level >= 1 &&
+                       spareOfLogical_[owner] < 0;
+    if (again && spareUsed_[bank] < 16)
+    {
+        unsigned spare = (kRows - 16u) + spareUsed_[bank];
+        if (spare == physicalRow)
+            spare -= 16u;
+        spareOfLogical_[owner] = static_cast<int>(spare);
+        logicalOfSpare_[spare] = static_cast<int>(owner);
+        if (region.level != 2)
+            transitions_.push_back(Transition{commands_, regionOf(owner), region.level, 2u});
+        region.level = 2;
+        sawL2_ = true;
+        const unsigned nextSpare = spareUsed_[bank] + 1u;
+        for (unsigned one = 0; one < kBanks; ++one)
+            spareUsed_[one] = nextSpare;
+        if (scrub_ != nullptr)
+            for (unsigned one = 0; one < kBanks; ++one)
+                scrub_(one, physicalRow, spare, scrubContext_);
+        return;
+    }
+    if (region.level == 0)
+    {
+        region.level = 1;
+        transitions_.push_back(Transition{commands_, regionOf(owner), 0u, 1u});
+        // The fast period is due now.  A cross-region hammer never increments
+        // this region's counter, so the CE itself has to release the first swap.
+        const unsigned every = period(regionOf(owner));
+        if (every > 0)
+            region.since = every;
+    }
 }
