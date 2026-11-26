@@ -1,5 +1,6 @@
 #include "ReadDisturbanceModel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -54,6 +55,23 @@ void ReadDisturbanceModel::setInjector(InjectFn function, void* context)
     context_ = context;
 }
 
+void ReadDisturbanceModel::setCodewordInjector(CodewordInjectFn function, void* context)
+{
+    codewordInject_ = function;
+    codewordContext_ = context;
+}
+
+void ReadDisturbanceModel::setDistribution(const std::string& shape, double vrdMax)
+{
+    if (shape != "truncated_lognormal" && shape != "uniform" && shape != "shifted_exponential")
+        throw std::invalid_argument(
+            "distribution shape must be truncated_lognormal, uniform, or shifted_exponential");
+    if (!(vrdMax >= 1.0))
+        throw std::invalid_argument("vrdMax must be >= 1.0");
+    distShape_ = shape;
+    vrdMax_ = vrdMax;
+}
+
 void ReadDisturbanceModel::forceRow(unsigned bank, unsigned row, double hcFirst, double alpha)
 {
     RowState& rowState = state(bank, row);
@@ -86,17 +104,29 @@ void ReadDisturbanceModel::ensure(unsigned bank, unsigned row)
     RowState& rowState = state(bank, row);
     if (rowState.ready)
         return;
-    const double mu = std::log(kMedian * kHcMin);
     double hc = 0;
-    do
+    if (distShape_ == "truncated_lognormal")
     {
-        const double u1 = std::max(1e-12, uniform(0));
-        const double u2 = uniform(0);
-        const double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
-        hc = std::exp(mu + kSigma * z);
-    } while (hc < kHcMin);
+        const double mu = std::log(kMedian * kHcMin);
+        do
+        {
+            const double u1 = std::max(1e-12, uniform(0));
+            const double u2 = uniform(0);
+            const double z = std::sqrt(-2.0 * std::log(u1)) * std::cos(6.283185307179586 * u2);
+            hc = std::exp(mu + kSigma * z);
+        } while (hc < kHcMin);
+    }
+    else if (distShape_ == "uniform")
+    {
+        hc = kHcMin * (1.0 + 1.0 * uniform(0));
+    }
+    else
+    {
+        const double u = std::max(1e-12, uniform(0));
+        hc = kHcMin + (-0.35 * kHcMin * std::log(u));
+    }
     rowState.hc = hc;
-    rowState.alpha = 1.0 + 2.5 * uniform(1);
+    rowState.alpha = 1.0 + (vrdMax_ - 1.0) * uniform(1);
     rowState.ready = true;
 }
 
@@ -124,6 +154,17 @@ double ReadDisturbanceModel::firstThreshold(unsigned bank, unsigned row)
 unsigned ReadDisturbanceModel::flipsOn(unsigned bank, unsigned row) const
 {
     return static_cast<unsigned>(state(bank, row).emitted);
+}
+
+uint64_t ReadDisturbanceModel::makeUsedKey(unsigned bank, unsigned row, unsigned burstColumn,
+                                           unsigned codeword, unsigned bit, bool parity) const
+{
+    return ((static_cast<uint64_t>(bank) & 0xFFull) << 56) |
+           ((static_cast<uint64_t>(row) & 0xFFFFull) << 40) |
+           ((static_cast<uint64_t>(burstColumn) & 0xFFull) << 32) |
+           ((static_cast<uint64_t>(codeword) & 0xFull) << 28) |
+           ((static_cast<uint64_t>(bit) & 0xFFull) << 1) |
+           (parity ? 1ull : 0ull);
 }
 
 bool ReadDisturbanceModel::drawBit(Flip& flip)
@@ -184,27 +225,99 @@ void ReadDisturbanceModel::consider(unsigned bank, unsigned row)
         // A repeated bit is not a new flip.  Try a few draws, then still
         // consume the level so the threshold ladder does not spin.
         bool placed = false;
-        if (inject_ != nullptr)
+        if (codewordInject_ != nullptr)
         {
-            for (unsigned bit = 0; bit < 64 && !placed; ++bit)
+            for (int attempt = 0; attempt < 512 && !placed; ++attempt)
             {
-                flip.parity = false;
-                flip.burstColumn = 0;
-                flip.bit = bit;
-                const uint64_t key = (static_cast<uint64_t>(flip.bank) << 48) ^
-                                     (static_cast<uint64_t>(flip.row) << 32) ^ flip.bit;
+                const double ticket = uniform(2) * 72.0;
+                flip.parity = ticket >= 64.0;
+                flip.burstColumn = std::min(31u, static_cast<unsigned>(uniform(2) * 32.0));
+                flip.codeword = std::min(3u, static_cast<unsigned>(uniform(2) * 4.0));
+                flip.bit = flip.parity ? std::min(7u, static_cast<unsigned>(ticket - 64.0))
+                                       : std::min(63u, static_cast<unsigned>(ticket));
+                const uint64_t key =
+                    makeUsedKey(bank, row, flip.burstColumn, flip.codeword, flip.bit, flip.parity);
                 bool seen = false;
                 for (uint64_t used : used_)
-                    seen = seen || used == key;
-                if (!seen && inject_(flip.bank, flip.row, 0, bit, false, context_))
+                {
+                    if (used == key)
+                    {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (!seen && codewordInject_(bank, row, flip.burstColumn, flip.codeword, flip.bit,
+                                             flip.parity, codewordContext_))
                 {
                     used_.push_back(key);
                     placed = true;
                 }
             }
+            if (!placed)
+            {
+                const unsigned startCol = std::min(31u, static_cast<unsigned>(uniform(2) * 32.0));
+                const unsigned startCw = std::min(3u, static_cast<unsigned>(uniform(2) * 4.0));
+                const unsigned startTicket = std::min(71u, static_cast<unsigned>(uniform(2) * 72.0));
+                for (unsigned colOffset = 0; colOffset < 32u && !placed; ++colOffset)
+                {
+                    const unsigned col = (startCol + colOffset) % 32u;
+                    for (unsigned cwOffset = 0; cwOffset < 4u && !placed; ++cwOffset)
+                    {
+                        const unsigned cw = (startCw + cwOffset) % 4u;
+                        for (unsigned bitOffset = 0; bitOffset < 72u && !placed; ++bitOffset)
+                        {
+                            const unsigned ticketIdx = (startTicket + bitOffset) % 72u;
+                            const bool parity = ticketIdx >= 64u;
+                            const unsigned bit = parity ? (ticketIdx - 64u) : ticketIdx;
+                            const uint64_t key = makeUsedKey(bank, row, col, cw, bit, parity);
+                            bool seen = false;
+                            for (uint64_t used : used_)
+                            {
+                                if (used == key)
+                                {
+                                    seen = true;
+                                    break;
+                                }
+                            }
+                            if (!seen && codewordInject_(bank, row, col, cw, bit, parity,
+                                                         codewordContext_))
+                            {
+                                flip.burstColumn = col;
+                                flip.codeword = cw;
+                                flip.bit = bit;
+                                flip.parity = parity;
+                                used_.push_back(key);
+                                placed = true;
+                            }
+                        }
+                    }
+                }
+            }
         }
-        for (int attempt = 0; attempt < 256 && !placed; ++attempt)
-            placed = drawBit(flip);
+        else
+        {
+            if (inject_ != nullptr)
+            {
+                for (unsigned bit = 0; bit < 64 && !placed; ++bit)
+                {
+                    flip.parity = false;
+                    flip.burstColumn = 0;
+                    flip.bit = bit;
+                    const uint64_t key = (static_cast<uint64_t>(flip.bank) << 48) ^
+                                         (static_cast<uint64_t>(flip.row) << 32) ^ flip.bit;
+                    bool seen = false;
+                    for (uint64_t used : used_)
+                        seen = seen || used == key;
+                    if (!seen && inject_(flip.bank, flip.row, 0, bit, false, context_))
+                    {
+                        used_.push_back(key);
+                        placed = true;
+                    }
+                }
+            }
+            for (int attempt = 0; attempt < 256 && !placed; ++attempt)
+                placed = drawBit(flip);
+        }
         rowState.emitted += 1;
         if (!crossings_.empty() && crossings_.back().bank == bank && crossings_.back().row == row &&
             crossings_.back().level == flip.level)
@@ -297,6 +410,43 @@ unsigned ReadDisturbanceModel::scrubSingleBits(unsigned bank, unsigned row)
     return corrected;
 }
 
+void ReadDisturbanceModel::releaseCodewordBits(unsigned bank, unsigned row, unsigned burstColumn,
+                                               unsigned codeword)
+{
+    const uint64_t targetPrefix =
+        ((static_cast<uint64_t>(bank) & 0xFFull) << 56) |
+        ((static_cast<uint64_t>(row) & 0xFFFFull) << 40) |
+        ((static_cast<uint64_t>(burstColumn) & 0xFFull) << 32) |
+        ((static_cast<uint64_t>(codeword) & 0xFull) << 28);
+    const uint64_t prefixMask = ~0x1FFull;
+    std::vector<uint64_t> keptUsed;
+    keptUsed.reserve(used_.size());
+    for (uint64_t key : used_)
+    {
+        if ((key & prefixMask) != targetPrefix)
+            keptUsed.push_back(key);
+    }
+    used_.swap(keptUsed);
+
+    std::vector<Flip> keptFlips;
+    keptFlips.reserve(flips_.size());
+    uint64_t removed = 0;
+    for (const Flip& flip : flips_)
+    {
+        if (flip.bank == bank && flip.row == row && flip.burstColumn == burstColumn &&
+            flip.codeword == codeword)
+        {
+            removed += 1;
+        }
+        else
+        {
+            keptFlips.push_back(flip);
+        }
+    }
+    flips_.swap(keptFlips);
+    scrubbed_ += removed;
+}
+
 void ReadDisturbanceModel::noteRefresh(unsigned bank, unsigned row)
 {
     if (bank >= kBanks || row >= kRows)
@@ -306,7 +456,7 @@ void ReadDisturbanceModel::noteRefresh(unsigned bank, unsigned row)
         refreshClears_ += 1;
     rowState.disturbance = 0;
     if (!rowState.forced)
-        rowState.alpha = 1.0 + 2.5 * uniform(1);
+        rowState.alpha = 1.0 + (vrdMax_ - 1.0) * uniform(1);
 }
 
 Phase3Attack::Phase3Attack(const std::string& name, unsigned victim) : name_(name), victim_(victim)
@@ -356,5 +506,9 @@ unsigned Phase3Attack::nextAggressor()
     if (pointer_ == nullptr)
         throw std::logic_error("A4 has no mapping pointer until M2");
     const unsigned pointed = pointer_(context_);
-    return step % 2 == 0 ? pointed - 1 : pointed + 1;
+    if (pointed == 0)
+        return 1u;
+    if (pointed + 1u >= ReadDisturbanceModel::kRows)
+        return ReadDisturbanceModel::kRows - 2u;
+    return step % 2 == 0 ? pointed - 1u : pointed + 1u;
 }

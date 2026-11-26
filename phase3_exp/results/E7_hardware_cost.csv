@@ -1,0 +1,6 @@
+component,scope,entries,bits_per_entry,total_bits,total_bytes,formula,notes
+region_map_table,per pseudo-channel,256,95,24320,3040,256 * (6(key_old) + 6(key_new) + 6(next_pair) + 2(state) + 2(quiet_cnt) + 1(alarmed) + 8(epoch_tag) + 64(migrated_bitmap)),Full 95-bit variant with migrated bitmap. Pointer-only variant (without bitmap): 31 bits/region = 7936 bits = 992 bytes.
+misra_gries_detector,per pseudo-channel,240,24,5760,720,16 * 15 * (14(row) + 10(count)),16 banks x 15 Misra-Gries slots/bank.
+l2_soft_repair_cam,per pseudo-channel,256,19,4864,608,16 * 16 * (14(source_row) + 4(spare_idx) + 1(valid)),16 banks x 16 L2 spare entries/bank.
+compute_epoch_registers,per pseudo-channel,321,8,2568,321,(64 report queue + 1 active channel + 256 op ledger) * 8-bit epoch,"Compute-side epoch state including report queue, active channel register, and Phase 2 op ledger."
+TOTAL,per pseudo-channel,1073,,37512,4689,Sum of all components,"Total: 37512 bits = 4689 bytes = 4.58 KiB per pseudo-channel, 73.3 KB across 16 pseudo-channels."

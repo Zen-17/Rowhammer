@@ -10,7 +10,6 @@ namespace
 const double kHcMin = 14531.0;
 const unsigned kDetect = 1024;
 const double kFth = 1.0 / 16.0;
-const unsigned kMisra = 15;
 
 unsigned scaledPeriod(double value)
 {
@@ -29,6 +28,14 @@ void RegionMap::configure(const std::string& scheme, double g, double c, double 
         throw std::invalid_argument("threshold_scale must be in (0, 1]");
     if (g <= 0.0 || c <= 0.0)
         throw std::invalid_argument("g and c must be positive");
+    regionRows_ = kRegion;
+    misraK_ = 15;
+    prngKeys_ = false;
+    allowCeFastPeriod_ = false;
+    epochCheck_ = (scheme == "FIX" || scheme == "ADA" || (ours && scheme != "OURS-EPOCH"));
+    lastG_ = g;
+    lastC_ = c;
+    lastScale_ = scale;
     scheme_ = ours ? "OURS" : scheme;
     ceFeedback_ = ours && scheme != "OURS-CE";
     scrubOn_ = scheme != "OURS-SCRUB";
@@ -38,8 +45,8 @@ void RegionMap::configure(const std::string& scheme, double g, double c, double 
     const double hc = kHcMin * scale;
     const double safe = hc / g;
     const unsigned detect = scaledPeriod(static_cast<double>(kDetect) * scale);
-    r1_ = scaledPeriod(safe / (c * static_cast<double>(kRegion)));
-    r0_ = scaledPeriod((safe / c - static_cast<double>(detect)) / (kFth * static_cast<double>(kRegion)));
+    r1_ = scaledPeriod(safe / (c * static_cast<double>(regionRows_)));
+    r0_ = scaledPeriod((safe / c - static_cast<double>(detect)) / (kFth * static_cast<double>(regionRows_)));
     detect_ = detect;
     // Alarm when a single-row count is strictly greater than E_det / 16.
     alarmAt_ = static_cast<unsigned>(std::floor(static_cast<double>(detect) * kFth));
@@ -54,8 +61,52 @@ void RegionMap::configure(const std::string& scheme, double g, double c, double 
     for (unsigned bank = 0; bank < kBanks; ++bank)
         spareUsed_[bank] = 0;
     transitions_.clear();
-    regions_.assign(kRegions, Region());
-    misra_.assign(kBanks, std::vector<Slot>(kMisra));
+    Region initRegion;
+    initRegion.migrated.assign(regionRows_, 0);
+    regions_.assign(kRows / regionRows_, initRegion);
+    misra_.assign(kBanks, std::vector<Slot>(misraK_));
+    for (unsigned bank = 0; bank < kBanks; ++bank)
+        filled_[bank] = 0;
+}
+
+void RegionMap::setSeed(uint64_t seed)
+{
+    rng_ = seed ^ 0x9E3779B97F4A7C15ull;
+    prngKeys_ = true;
+}
+
+void RegionMap::setMarginG(double g, double c, double scale)
+{
+    if (!(g > 0.0 && c > 0.0 && scale > 0.0 && scale <= 1.0))
+        throw std::invalid_argument("g, c must be positive and scale in (0, 1]");
+    lastG_ = g;
+    lastC_ = c;
+    lastScale_ = scale;
+    const double hc = kHcMin * scale;
+    const double safe = hc / g;
+    r1_ = scaledPeriod(safe / (c * static_cast<double>(regionRows_)));
+    r0_ = scaledPeriod((safe / c - static_cast<double>(detect_)) /
+                       (kFth * static_cast<double>(regionRows_)));
+}
+
+void RegionMap::setGeometry(unsigned regionRows, unsigned misraK)
+{
+    if (regionRows != 16u && regionRows != 32u && regionRows != 64u &&
+        regionRows != 128u && regionRows != 256u)
+        throw std::invalid_argument("regionRows must be in {16, 32, 64, 128, 256}");
+    if (misraK < 1u)
+        throw std::invalid_argument("misraK must be >= 1");
+    regionRows_ = regionRows;
+    misraK_ = misraK;
+    const double hc = kHcMin * lastScale_;
+    const double safe = hc / lastG_;
+    r1_ = scaledPeriod(safe / (lastC_ * static_cast<double>(regionRows_)));
+    r0_ = scaledPeriod((safe / lastC_ - static_cast<double>(detect_)) /
+                       (kFth * static_cast<double>(regionRows_)));
+    Region initRegion;
+    initRegion.migrated.assign(regionRows_, 0);
+    regions_.assign(kRows / regionRows_, initRegion);
+    misra_.assign(kBanks, std::vector<Slot>(misraK_));
     for (unsigned bank = 0; bank < kBanks; ++bank)
         filled_[bank] = 0;
 }
@@ -73,7 +124,7 @@ unsigned RegionMap::physical(unsigned logicalRow) const
     if (!spareOfLogical_.empty() && spareOfLogical_[logicalRow] >= 0)
         return static_cast<unsigned>(spareOfLogical_[logicalRow]);
     const unsigned region = regionOf(logicalRow);
-    return region * kRegion + keyed(regions_[region], offsetOf(logicalRow));
+    return region * regionRows_ + keyed(regions_[region], offsetOf(logicalRow));
 }
 
 unsigned RegionMap::logical(unsigned physicalRow) const
@@ -88,11 +139,11 @@ unsigned RegionMap::logical(unsigned physicalRow) const
         const unsigned region = regionOf(physicalRow);
         const unsigned offset = offsetOf(physicalRow);
         bool found = false;
-        for (unsigned candidate = 0; candidate < kRegion; ++candidate)
+        for (unsigned candidate = 0; candidate < regionRows_; ++candidate)
         {
             if (keyed(regions_[region], candidate) == offset)
             {
-                row = region * kRegion + candidate;
+                row = region * regionRows_ + candidate;
                 found = true;
                 break;
             }
@@ -121,7 +172,7 @@ unsigned RegionMap::period(unsigned region) const
         return r1_;
     if (scheme_ == "NONE" || scheme_ == "PARA" || scheme_ == "REACT")
         return 0;
-    if (scheme_ == "OURS" && !detector_)
+    if (scheme_ == "OURS" && !detector_ && !allowCeFastPeriod_)
         return r0_;
     return regions_.at(region).level == 0 ? r0_ : r1_;
 }
@@ -139,16 +190,18 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
     if (delta == 0)
         delta = 1;
     unsigned left = region.nextPair;
-    while (left < kRegion && (region.migrated[left] || left > (left ^ delta)))
+    while (left < regionRows_ && (region.migrated[left] || left > (left ^ delta)))
         left += 1;
-    if (left >= kRegion)
+    if (left >= regionRows_)
     {
         region.keyOld = region.keyNew;
-        region.keyNew = (region.keyNew + 1u) & 63u;
+        if (prngKeys_)
+            region.keyNew = static_cast<unsigned>(nextRandom() & (regionRows_ - 1u));
+        else
+            region.keyNew = (region.keyNew + 1u) & (regionRows_ - 1u);
         if (region.keyNew == region.keyOld)
             region.keyNew ^= 1u;
-        for (unsigned offset = 0; offset < kRegion; ++offset)
-            region.migrated[offset] = false;
+        region.migrated.assign(regionRows_, 0);
         region.nextPair = 0;
         region.epoch += 1;
         delta = region.keyOld ^ region.keyNew;
@@ -157,8 +210,16 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
         left = 0;
     }
     const unsigned right = left ^ delta;
-    const unsigned source = regionIndex * kRegion + (left ^ region.keyOld);
-    const unsigned dest = regionIndex * kRegion + (right ^ region.keyOld);
+    const unsigned source = regionIndex * regionRows_ + (left ^ region.keyOld);
+    const unsigned dest = regionIndex * regionRows_ + (right ^ region.keyOld);
+    if ((!logicalOfSpare_.empty() && source < logicalOfSpare_.size() && logicalOfSpare_[source] >= 0) ||
+        (!logicalOfSpare_.empty() && dest < logicalOfSpare_.size() && logicalOfSpare_[dest] >= 0))
+    {
+        region.migrated[left] = 1;
+        region.migrated[right] = 1;
+        region.nextPair = left + 1;
+        return;
+    }
     for (unsigned bank = 0; bank < kBanks; ++bank)
     {
         if (scrub_ != nullptr)
@@ -174,8 +235,8 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
         if (dest < swapped_.size())
             swapped_[dest] = 1;
     }
-    region.migrated[left] = true;
-    region.migrated[right] = true;
+    region.migrated[left] = 1;
+    region.migrated[right] = 1;
     region.nextPair = left + 1;
     swaps_ += 1;
 }
@@ -183,7 +244,7 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
 void RegionMap::observe(unsigned bank, unsigned row)
 {
     std::vector<Slot>& slots = misra_.at(bank);
-    for (unsigned i = 0; i < kMisra; ++i)
+    for (unsigned i = 0; i < misraK_; ++i)
     {
         if (slots[i].row == static_cast<int>(row))
         {
@@ -191,7 +252,7 @@ void RegionMap::observe(unsigned bank, unsigned row)
             return;
         }
     }
-    for (unsigned i = 0; i < kMisra; ++i)
+    for (unsigned i = 0; i < misraK_; ++i)
     {
         if (slots[i].row < 0)
         {
@@ -200,7 +261,7 @@ void RegionMap::observe(unsigned bank, unsigned row)
             return;
         }
     }
-    for (unsigned i = 0; i < kMisra; ++i)
+    for (unsigned i = 0; i < misraK_; ++i)
     {
         if (slots[i].count > 0)
             slots[i].count -= 1;
@@ -236,7 +297,7 @@ void RegionMap::settleWindows()
                 transitions_.push_back(Transition{commands_, regionOf(static_cast<unsigned>(hotRow)), 0u, 1u});
             }
         }
-        misra_[bank].assign(kMisra, Slot());
+        misra_[bank].assign(misraK_, Slot());
         filled_[bank] = 0;
     }
 }
@@ -264,12 +325,12 @@ unsigned RegionMap::migrationSource(unsigned regionIndex) const
     if (delta == 0)
         delta = 1;
     unsigned left = region.nextPair;
-    while (left < kRegion && (region.migrated[left] || left > (left ^ delta)))
+    while (left < regionRows_ && (region.migrated[left] || left > (left ^ delta)))
         left += 1;
-    if (left >= kRegion)
+    if (left >= regionRows_)
         left = 0;
     const unsigned right = left ^ delta;
-    const unsigned source = regionIndex * kRegion + (left ^ region.keyOld);
+    const unsigned source = regionIndex * regionRows_ + (left ^ region.keyOld);
     (void)right;
     return source;
 }
@@ -330,7 +391,7 @@ void RegionMap::flush(ReadDisturbanceModel* model)
 {
     if (scheme_ == "NONE" || scheme_ == "PARA" || scheme_ == "REACT")
         return;
-    for (unsigned region = 0; region < kRegions; ++region)
+    for (unsigned region = 0; region < regions_.size(); ++region)
     {
         const unsigned every = period(region);
         if (every == 0)
@@ -389,11 +450,11 @@ void RegionMap::noteCe(unsigned bank, unsigned physicalRow)
     {
         const unsigned region = regionOf(physicalRow);
         const unsigned offset = offsetOf(physicalRow);
-        for (unsigned candidate = 0; candidate < kRegion; ++candidate)
+        for (unsigned candidate = 0; candidate < regionRows_; ++candidate)
         {
             if (keyed(regions_[region], candidate) == offset)
             {
-                owner = region * kRegion + candidate;
+                owner = region * regionRows_ + candidate;
                 found = true;
                 break;
             }
@@ -402,6 +463,8 @@ void RegionMap::noteCe(unsigned bank, unsigned physicalRow)
     if (!found)
         return;
     Region& region = regions_[regionOf(owner)];
+    region.alarmed = true;
+    region.quiet = 0;
     const bool again = physicalRow < swapped_.size() && swapped_[physicalRow] != 0 && region.level >= 1 &&
                        spareOfLogical_[owner] < 0;
     if (again && spareUsed_[bank] < 16)

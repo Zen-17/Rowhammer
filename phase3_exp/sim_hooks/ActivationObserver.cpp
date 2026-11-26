@@ -130,6 +130,8 @@ void ActivationObserver::onRefresh(uint64_t cycle)
         }
     }
     pointer_ = (pointer_ + 2) % kRows;
+    if (region_ != nullptr && (refreshCommands_ % (kRows / 2u)) == 0)
+        region_->noteRefreshWindow();
     (void)cycle;
 }
 

@@ -236,7 +236,11 @@ Decision RecoveryEngine::analyze(const Phase1PublicReport& report, uint64_t t_ac
                                  bool report_overflow,
                                  const Phase1Address& address) const
 {
-    if (!phase3MappingAccepted(report.actual_bank, report.logical_row, report.mapping_epoch))
+    const bool epochOk = phase3ReportEpochRelaxed()
+                             ? report.mapping_consistent
+                             : phase3MappingAccepted(report.actual_bank, report.logical_row,
+                                                     report.mapping_epoch);
+    if (!epochOk)
     {
         Decision decision;
         decision.status = P2Status::STALE_EPOCH;

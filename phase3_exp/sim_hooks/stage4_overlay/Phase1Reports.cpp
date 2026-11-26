@@ -33,8 +33,14 @@ void Phase1Reports::onDetected(const Phase1Detection& detection)
         detection.status != Phase1EccStatus::UNCORRECTABLE)
         return;
 
-    internal_detections_++;
     const bool is_ce = (detection.status == Phase1EccStatus::CORRECTED);
+    if (is_ce && on_die_ecc_mode_)
+    {
+        on_die_masked_ce_++;
+        return;
+    }
+
+    internal_detections_++;
     if (is_ce)
         internal_ce_++;
     else
@@ -47,12 +53,19 @@ void Phase1Reports::onDetected(const Phase1Detection& detection)
     item.ready_cycle = detection.detect_cycle + std::max<uint64_t>(1, transport_delay_);
     item.arrival_seq = next_arrival_seq_++;
     item.error_class = is_ce ? "CE" : "UE";
+    item.physical_row = detection.row;
+    item.burst_column = detection.burst_column;
+    item.codeword_index = detection.codeword_index;
+    item.channel = detection.channel;
+    item.rank = detection.rank;
 
     Phase1AddrTuple tuple;
     tuple.channel = detection.channel;
     tuple.rank = detection.rank;
     tuple.bank = detection.actual_bank;
-    tuple.row = detection.row;
+    tuple.row = phase3LateReportTranslation()
+                    ? detection.row
+                    : phase3LogicalRow(detection.actual_bank, detection.row);
     tuple.burst_column = detection.burst_column;
     if (granularity_ == "bank")
     {
@@ -91,7 +104,7 @@ void Phase1Reports::onDetected(const Phase1Detection& detection)
     item.actual_bank = detection.actual_bank;
     item.mapping_consistent =
         phase3MappingAccepted(detection.actual_bank, item.logical_row, item.mapping_epoch);
-    if (is_ce)
+    if (!defer_ce_hook_ && is_ce)
         phase3NoteCe(detection.actual_bank, detection.row);
     if (pending_.size() >= capacity_)
     {
@@ -127,6 +140,37 @@ void Phase1Reports::tick(uint64_t cycle)
     report.logical_row = front.logical_row;
     report.actual_bank = front.actual_bank;
     report.mapping_consistent = front.mapping_consistent;
+    if (defer_ce_hook_ && front.error_class == "CE")
+        phase3NoteCe(front.actual_bank, front.physical_row);
+    if (phase3LateReportTranslation())
+    {
+        const unsigned lateLogical = phase3LogicalRow(front.actual_bank, front.physical_row);
+        report.logical_row = lateLogical;
+        report.mapping_epoch = phase3MappingEpoch(front.actual_bank, front.physical_row);
+        report.mapping_consistent = true;
+        if (front.region_type == "page")
+        {
+            Phase1AddrTuple tuple;
+            tuple.channel = front.channel;
+            tuple.rank = front.rank;
+            tuple.bank = front.actual_bank;
+            tuple.row = lateLogical;
+            tuple.burst_column = front.burst_column;
+            report.region_id = address_.encode(tuple) / 4096ULL;
+        }
+        else if (front.region_type == "codeword")
+        {
+            const Phase1Geometry& geometry = address_.geometry();
+            report.region_id =
+                (((static_cast<uint64_t>(front.channel) * num_banks_ + front.actual_bank) *
+                      geometry.num_rows +
+                  lateLogical) *
+                     geometry.burst_columns() +
+                 front.burst_column) *
+                    4ULL +
+                front.codeword_index;
+        }
+    }
     reports_.push_back(report);
     latencies_.push_back(cycle - front.detect_cycle);
     delivered_++;

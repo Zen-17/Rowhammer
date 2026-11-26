@@ -31,6 +31,7 @@
 #ifndef BANK_H
 #define BANK_H
 
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <vector>
@@ -72,6 +73,8 @@ class Bank
     // false preserves the pre-G13 read path byte-for-byte.
     void setPhase1Scrub(bool enabled) { phase1Scrub_ = enabled; }
     uint64_t phase1ScrubWrites() const { return phase1ScrubWrites_; }
+    void setSwapScrub(bool enabled) { swapScrub_ = enabled; }
+    bool swapScrub() const { return swapScrub_; }
     void injectRawDataBit(unsigned row, unsigned burstColumn, unsigned bitInBurst);
     void injectRawParityBit(unsigned row, unsigned burstColumn, unsigned codeword, unsigned bit);
     uint64_t dataAccessCount() const { return dataAccessCount_; }
@@ -110,6 +113,25 @@ class Bank
                 // turn a correctable fault into a clean word and would drop an
                 // uncorrectable word off the destination row.
                 phase1Storage_.moveCodeword(from, to);
+                if (swapScrub_ && profile_ != Phase1Profile::NATIVE)
+                {
+                    Phase1StorageKey keys[2] = {to, from};
+                    unsigned rows[2] = {dest, source};
+                    for (int k = 0; k < 2; ++k)
+                    {
+                        if (!phase1Storage_.contains(keys[k]))
+                            continue;
+                        const Phase1EccResult decoded = phase1Storage_.readProtected(keys[k]);
+                        if (decoded.status == Phase1EccStatus::CORRECTED)
+                        {
+                            phase1Storage_.writeLegal(keys[k], decoded.data);
+                            phase1ScrubWrites_++;
+                            std::shared_ptr<DataStruct> node = searchForRow(rows[k], rowEntries[col]);
+                            if (node != NULL)
+                                std::memcpy(&node->data.u8Data_[word * 8], &decoded.data, sizeof(decoded.data));
+                        }
+                    }
+                }
             }
         }
     }
@@ -135,6 +157,7 @@ class Bank
     Phase1ReportSink* reportSink_ = nullptr;
     Phase1Storage phase1Storage_;
     bool phase1Scrub_ = false;
+    bool swapScrub_ = false;
     uint64_t phase1ScrubWrites_ = 0;
     uint64_t dataAccessCount_ = 0;
 };

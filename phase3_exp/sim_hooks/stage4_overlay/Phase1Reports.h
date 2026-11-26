@@ -78,6 +78,12 @@ class Phase1Reports : public Phase1ReportSink
     void tick(uint64_t cycle);
     void writeCsv(const std::string& path) const;
 
+    void setOnDieEccMode(bool enabled) { on_die_ecc_mode_ = enabled; }
+    bool onDieEccMode() const { return on_die_ecc_mode_; }
+    void setDeferCeHookToTick(bool enabled) { defer_ce_hook_ = enabled; }
+    bool deferCeHookToTick() const { return defer_ce_hook_; }
+    uint64_t onDieMaskedCe() const { return on_die_masked_ce_; }
+
     const std::vector<Phase1PublicReport>& reports() const { return reports_; }
     const std::vector<uint64_t>& reportLatencies() const { return latencies_; }
     std::size_t pendingCount() const { return pending_.size(); }
@@ -103,6 +109,11 @@ class Phase1Reports : public Phase1ReportSink
         uint64_t mapping_epoch = 0;
         unsigned logical_row = 0;
         unsigned actual_bank = 0;
+        unsigned physical_row = 0;
+        unsigned burst_column = 0;
+        unsigned codeword_index = 0;
+        unsigned channel = 0;
+        unsigned rank = 0;
         bool mapping_consistent = true;
     };
 
@@ -130,6 +141,9 @@ class Phase1Reports : public Phase1ReportSink
     uint64_t format_events_ = 0;
     bool overflow_ = false;
     std::size_t max_queue_depth_ = 0;
+    bool on_die_ecc_mode_ = false;
+    bool defer_ce_hook_ = false;
+    uint64_t on_die_masked_ce_ = 0;
 };
 }  // namespace DRAMSim
 

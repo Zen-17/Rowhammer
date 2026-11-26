@@ -20,6 +20,21 @@ class RegionMap
     static const unsigned kRegions = kRows / kRegion;
 
     void configure(const std::string& scheme, double g, double c, double scale);
+    void setSeed(uint64_t seed);
+    void setCeFeedback(bool enabled) { ceFeedback_ = enabled; }
+    void setScrubEnabled(bool enabled) { scrubOn_ = enabled; }
+    void setEpochCheck(bool enabled) { epochCheck_ = enabled; }
+    bool epochCheck() const { return epochCheck_; }
+    void setEpochCorrupt(bool enabled) { epochCorrupt_ = enabled; }
+    void setDetectorEnabled(bool enabled, bool allowCeFastPeriod = false)
+    {
+        detector_ = enabled;
+        allowCeFastPeriod_ = allowCeFastPeriod;
+    }
+    void setMarginG(double g, double c, double scale);
+    void setGeometry(unsigned regionRows, unsigned misraK);
+    unsigned regionRows() const { return regionRows_; }
+    unsigned misraK() const { return misraK_; }
 
     unsigned physical(unsigned logicalRow) const;
     unsigned logical(unsigned physicalRow) const;
@@ -78,7 +93,7 @@ class RegionMap
         unsigned quiet = 0;
         uint64_t epoch = 0;
         bool alarmed = false;
-        bool migrated[kRegion] = {};
+        std::vector<unsigned char> migrated;
     };
 
     struct Slot
@@ -87,8 +102,8 @@ class RegionMap
         unsigned count = 0;
     };
 
-    unsigned regionOf(unsigned row) const { return row / kRegion; }
-    unsigned offsetOf(unsigned row) const { return row % kRegion; }
+    unsigned regionOf(unsigned row) const { return row / regionRows_; }
+    unsigned offsetOf(unsigned row) const { return row % regionRows_; }
     unsigned keyed(const Region& region, unsigned offset) const;
     void swapOnce(unsigned region, ReadDisturbanceModel* model);
     void observe(unsigned bank, unsigned row);
@@ -96,6 +111,8 @@ class RegionMap
     uint64_t nextRandom();
 
     std::string scheme_ = "FIX";
+    unsigned regionRows_ = kRegion;
+    unsigned misraK_ = 15;
     unsigned r0_ = 1;
     unsigned r1_ = 1;
     unsigned detect_ = 1024;
@@ -105,12 +122,18 @@ class RegionMap
     uint64_t paraCommands_ = 0;
     uint64_t rng_ = 0x9E3779B97F4A7C15ull;
     double paraP_ = 0;
+    double lastG_ = 1.5;
+    double lastC_ = 2.0;
+    double lastScale_ = 1.0;
     bool defer_ = false;
     bool sawL2_ = false;
     bool ceFeedback_ = false;
     bool scrubOn_ = true;
+    bool epochCheck_ = true;
     bool epochCorrupt_ = false;
     bool detector_ = false;
+    bool allowCeFastPeriod_ = false;
+    bool prngKeys_ = false;
     bool recovery_ = false;
     std::vector<unsigned char> swapped_;
     std::vector<int> spareOfLogical_;

@@ -18,11 +18,16 @@ class ReadDisturbanceModel
     // Return false when the bit is not a written codeword or was already used.
     typedef bool (*InjectFn)(unsigned bank, unsigned row, unsigned burstColumn, unsigned bit,
                              bool parity, void* context);
+    typedef bool (*CodewordInjectFn)(unsigned bank, unsigned row, unsigned burstColumn,
+                                     unsigned codeword, unsigned bit, bool parity, void* context);
 
     ReadDisturbanceModel();
 
     void configure(uint64_t seed, double thresholdScale, const std::string& genMode);
     void setInjector(InjectFn function, void* context);
+    void setCodewordInjector(CodewordInjectFn function, void* context);
+    void setDistribution(const std::string& shape, double vrdMax);
+    void releaseCodewordBits(unsigned bank, unsigned row, unsigned burstColumn, unsigned codeword);
     // Unit tests pin one row so the threshold is not a random draw.
     void forceRow(unsigned bank, unsigned row, double hcFirst, double alpha);
 
@@ -57,6 +62,7 @@ class ReadDisturbanceModel
         unsigned bank = 0;
         unsigned row = 0;
         unsigned burstColumn = 0;
+        unsigned codeword = 0;
         unsigned bit = 0;
         bool parity = false;
         uint64_t actOrdinal = 0;
@@ -94,9 +100,13 @@ class ReadDisturbanceModel
     void consider(unsigned bank, unsigned row);
     bool drawBit(Flip& flip);
     double uniform(int stream);
+    uint64_t makeUsedKey(unsigned bank, unsigned row, unsigned burstColumn, unsigned codeword,
+                         unsigned bit, bool parity) const;
 
     double scale_ = 1;
     std::string genMode_ = "HBM2";
+    std::string distShape_ = "truncated_lognormal";
+    double vrdMax_ = 3.5;
     uint64_t stream_[3] = {};
     uint64_t activates_ = 0;
     uint64_t cumulative_ = 0;
@@ -111,6 +121,8 @@ class ReadDisturbanceModel
     bool commandOnlySwap_ = false;
     InjectFn inject_ = nullptr;
     void* context_ = nullptr;
+    CodewordInjectFn codewordInject_ = nullptr;
+    void* codewordContext_ = nullptr;
     std::vector<RowState> rows_;
     std::vector<Flip> flips_;
     std::vector<uint64_t> used_;

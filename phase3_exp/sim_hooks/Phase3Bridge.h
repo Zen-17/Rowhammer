@@ -36,5 +36,9 @@ void phase3NoteHostLatency(uint64_t cycles);
 uint64_t phase3HostLatencySamples();
 double phase3HostLatencyMean();
 double phase3HostLatencyP99();
+void phase3SetLateReportTranslation(bool enabled);
+bool phase3LateReportTranslation();
+void phase3SetReportEpochRelaxed(bool enabled);
+bool phase3ReportEpochRelaxed();
 
 #endif

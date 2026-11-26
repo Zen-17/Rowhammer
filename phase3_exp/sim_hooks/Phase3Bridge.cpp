@@ -21,6 +21,8 @@ uint64_t blockedReads = 0;
 uint64_t staleRequests = 0;
 bool issueEpochArmed = false;
 uint64_t issueEpoch = 0;
+bool lateReportTranslation = false;
+bool reportEpochRelaxed = false;
 }  // namespace
 
 bool phase3IsLogicalDataTag(const std::string& tag)
@@ -28,7 +30,7 @@ bool phase3IsLogicalDataTag(const std::string& tag)
     return tag.empty() || tag == "output" || tag == "HOST_BG" || tag == "BANK_TO_GRF_" ||
            tag == "ADD" || tag == "MUL" || tag == "GRF_TO_BANK" || tag == "FILL&ReLU" ||
            tag == "GRF_A_TO_EVEN_BANK" || tag == "GRF_B_TO_ODD_BANK" || tag == "MAC_" ||
-           tag == "GRF_B_TO_BANK_";
+           tag == "GRF_B_TO_BANK_" || tag == "GRFB_TO_BANK_";
 }
 
 uint64_t phase3LogicalEpoch(unsigned bank, unsigned logicalRow)
@@ -190,4 +192,24 @@ double phase3HostLatencyP99()
     std::sort(ordered.begin(), ordered.end());
     const size_t index = static_cast<size_t>(std::ceil(0.99 * static_cast<double>(ordered.size()))) - 1;
     return static_cast<double>(ordered[std::min(index, ordered.size() - 1)]);
+}
+
+void phase3SetLateReportTranslation(bool enabled)
+{
+    lateReportTranslation = enabled;
+}
+
+bool phase3LateReportTranslation()
+{
+    return lateReportTranslation;
+}
+
+void phase3SetReportEpochRelaxed(bool enabled)
+{
+    reportEpochRelaxed = enabled;
+}
+
+bool phase3ReportEpochRelaxed()
+{
+    return reportEpochRelaxed;
 }
