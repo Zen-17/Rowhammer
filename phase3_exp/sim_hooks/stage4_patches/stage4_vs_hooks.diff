@@ -1,0 +1,675 @@
+--- a/Bank.cpp	2026-11-16 10:10:19.000000000 +0000
++++ b/Bank.cpp	2026-11-25 11:27:33.000000000 +0000
+@@ -33,8 +33,10 @@
+ #include <cstring>
+ #include <memory>
+ #include <stdexcept>
++#include <string>
+ 
+ #include "BusPacket.h"
++#include "Phase3Bridge.h"
+ 
+ using namespace std;
+ using namespace DRAMSim;
+@@ -78,25 +80,55 @@
+     return NULL;
+ }
+ 
++unsigned Bank::mappedRow(const BusPacket* packet) const
++{
++    if (packet == nullptr || !phase3IsLogicalDataTag(packet->tag))
++        return packet == nullptr ? 0 : packet->row;
++    return phase3PhysicalRow(actualBank_, packet->row);
++}
++
+ void Bank::read(BusPacket* busPacket, Phase1AccessType access, uint64_t cycle)
+ {
+     dataAccessCount_++;
++    const unsigned row = mappedRow(busPacket);
++    const bool logical = busPacket != nullptr && phase3IsLogicalDataTag(busPacket->tag);
++    const bool blocked = logical && phase3ConsumptionBlocked(busPacket->row);
++    const bool stale = logical && busPacket->phase3_epoch_bound &&
++                       busPacket->phase3_bound_epoch != phase3LogicalEpoch(actualBank_, busPacket->row);
++    const bool mappingOk = !logical || phase3MappingAccepted(actualBank_, busPacket->row,
++                                                             phase3MappingEpoch(actualBank_, row));
++    if (blocked)
++        phase3NoteBlockedRead();
++    if (stale)
++        phase3NoteStaleRequest();
++    const bool deliver = !blocked && !stale && mappingOk;
++    if (!deliver && busPacket != nullptr)
++    {
++        busPacket->phase3_operand_denied = true;
++        if (busPacket->data != nullptr)
++            std::memset(busPacket->data->u8Data_, 0, sizeof(busPacket->data->u8Data_));
++        // A blocked or stale read is cancelled.  The cleared buffer is not an
++        // operand: callers must see phase3_operand_denied and skip the ALU.
++        if (blocked || stale)
++            return;
++    }
+     shared_ptr<DataStruct> rowHeadNode = rowEntries[busPacket->column];
+     shared_ptr<DataStruct> foundNode = NULL;
+-    if ((foundNode = Bank::searchForRow(busPacket->row, rowHeadNode)) == NULL)
++    if ((foundNode = Bank::searchForRow(row, rowHeadNode)) == NULL)
+     {
+         return;
+     }
+ 
+     if (profile_ == Phase1Profile::NATIVE || !eccEnabled(access))
+     {
++        if (!deliver)
++            return;
+         if (profile_ == Phase1Profile::HOST_ONLY && access != Phase1AccessType::HOST)
+         {
+             // PIM/HAB read path in HOST_ONLY: raw storage, no decoder.
+             for (unsigned cw = 0; cw < 4; cw++)
+             {
+-                Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row,
+-                                        busPacket->column, cw};
++                Phase1StorageKey key = {channel_, rank_, actualBank_, row, busPacket->column, cw};
+                 if (!phase1Storage_.contains(key))
+                     return;
+                 const uint64_t word = phase1Storage_.readRawData(key);
+@@ -112,14 +144,13 @@
+ 
+     for (unsigned cw = 0; cw < 4; cw++)
+     {
+-        Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row, busPacket->column,
+-                                cw};
++        Phase1StorageKey key = {channel_, rank_, actualBank_, row, busPacket->column, cw};
+         if (!phase1Storage_.contains(key))
+             return;
+         const Phase1EccResult result = phase1Storage_.readProtected(key);
+-        if (result.status == Phase1EccStatus::CLEAN ||
+-            result.status == Phase1EccStatus::CORRECTED ||
+-            result.status == Phase1EccStatus::UNCORRECTABLE)
++        if (deliver && (result.status == Phase1EccStatus::CLEAN ||
++                        result.status == Phase1EccStatus::CORRECTED ||
++                        result.status == Phase1EccStatus::UNCORRECTABLE))
+         {
+             std::memcpy(&busPacket->data->u8Data_[cw * 8], &result.data, sizeof(result.data));
+         }
+@@ -131,7 +162,7 @@
+             detection.channel = channel_;
+             detection.rank = rank_;
+             detection.actual_bank = actualBank_;
+-            detection.row = busPacket->row;
++            detection.row = row;
+             detection.burst_column = busPacket->column;
+             detection.codeword_index = cw;
+             detection.status = result.status;
+@@ -155,7 +186,7 @@
+             event.channel = channel_;
+             event.rank = rank_;
+             event.actual_bank = actualBank_;
+-            event.row = busPacket->row;
++            event.row = row;
+             event.burst_column = busPacket->column;
+             event.codeword_index = cw;
+             event.access = access;
+@@ -173,6 +204,14 @@
+ {
+     (void)cycle;
+     dataAccessCount_++;
++    const unsigned row = mappedRow(busPacket);
++    if (busPacket != nullptr && phase3IsLogicalDataTag(busPacket->tag) &&
++        busPacket->phase3_epoch_bound &&
++        busPacket->phase3_bound_epoch != phase3LogicalEpoch(actualBank_, busPacket->row))
++    {
++        phase3NoteStaleRequest();
++        return;
++    }
+     if (busPacket->column >= numCols)
+     {
+         ERROR("== Error - Bus Packet column " << busPacket->column << " out of bounds");
+@@ -181,10 +220,10 @@
+ 
+     shared_ptr<DataStruct> rowHeadNode = rowEntries[busPacket->column];
+     shared_ptr<DataStruct> foundNode = NULL;
+-    if ((foundNode = Bank::searchForRow(busPacket->row, rowHeadNode)) == NULL)
++    if ((foundNode = Bank::searchForRow(row, rowHeadNode)) == NULL)
+     {
+         shared_ptr<DataStruct> newRowNode = make_shared<DataStruct>();
+-        newRowNode->row = busPacket->row;
++        newRowNode->row = row;
+         if (busPacket->data)
+             newRowNode->data = *(busPacket->data);
+         newRowNode->next = rowHeadNode;
+@@ -204,8 +243,7 @@
+     {
+         uint64_t word = 0;
+         std::memcpy(&word, &busPacket->data->u8Data_[cw * 8], sizeof(word));
+-        Phase1StorageKey key = {channel_, rank_, actualBank_, busPacket->row, busPacket->column,
+-                                cw};
++        Phase1StorageKey key = {channel_, rank_, actualBank_, row, busPacket->column, cw};
+         if (protect)
+             phase1Storage_.writeLegal(key, word);
+         else
+--- a/Bank.h	2026-11-26 12:34:38.882933855 +0000
++++ b/Bank.h	2026-11-25 04:34:09.000000000 +0000
+@@ -65,6 +65,7 @@
+                uint64_t cycle = 0);
+ 
+     void setIdentity(unsigned channel, unsigned rank, unsigned actual_bank);
++    unsigned identityBank() const { return actualBank_; }
+     void setPhase1(Phase1Profile profile, Phase1ReportSink* reportSink);
+     // ASSUMED, idealized zero-cost scrub: when enabled, a corrected read
+     // rewrites the corrected codeword and increments this counter.  Default
+@@ -105,28 +106,10 @@
+                 from.codeword_index = word;
+                 Phase1StorageKey to = from;
+                 to.row = dest;
+-                const bool hasFrom = phase1Storage_.contains(from);
+-                const bool hasTo = phase1Storage_.contains(to);
+-                uint64_t fromData = 0;
+-                uint64_t toData = 0;
+-                bool fromRaw = false;
+-                bool toRaw = false;
+-                if (hasFrom)
+-                {
+-                    const Phase1EccResult decoded = phase1Storage_.readProtected(from);
+-                    fromRaw = decoded.status == Phase1EccStatus::UNCORRECTABLE;
+-                    fromData = fromRaw ? phase1Storage_.readRawData(from) : decoded.data;
+-                }
+-                if (hasTo)
+-                {
+-                    const Phase1EccResult decoded = phase1Storage_.readProtected(to);
+-                    toRaw = decoded.status == Phase1EccStatus::UNCORRECTABLE;
+-                    toData = toRaw ? phase1Storage_.readRawData(to) : decoded.data;
+-                }
+-                if (hasFrom && !fromRaw)
+-                    phase1Storage_.writeLegal(to, fromData);
+-                if (hasTo && !toRaw)
+-                    phase1Storage_.writeLegal(from, toData);
++                // Keep the stored word and its parity.  Re-encoding here would
++                // turn a correctable fault into a clean word and would drop an
++                // uncorrectable word off the destination row.
++                phase1Storage_.moveCodeword(from, to);
+             }
+         }
+     }
+@@ -141,6 +124,7 @@
+     ostream& dramsimLog;
+     static std::shared_ptr<DataStruct> searchForRow(unsigned row, std::shared_ptr<DataStruct> head);
+     bool eccEnabled(Phase1AccessType access) const;
++    unsigned mappedRow(const BusPacket* packet) const;
+     void reportDetection(const Phase1Detection& detection) const;
+     void reportFormat(const Phase1FormatEvent& event) const;
+     unsigned numCols;
+--- a/BusPacket.h	2026-11-15 13:49:50.000000000 +0000
++++ b/BusPacket.h	2026-11-25 11:27:33.000000000 +0000
+@@ -66,6 +66,9 @@
+     BurstType* data;
+     std::string tag;
+     Phase1PacketStatus phase1_status = Phase1PacketStatus::OK;
++    bool phase3_epoch_bound = false;
++    uint64_t phase3_bound_epoch = 0;
++    bool phase3_operand_denied = false;
+ 
+     // Functions
+     BusPacket(BusPacketType packtype, uint64_t physicalAddr, unsigned col, unsigned rw, unsigned r,
+--- a/MemoryController.cpp	2026-11-26 12:34:38.882933855 +0000
++++ b/MemoryController.cpp	2026-11-25 11:27:39.000000000 +0000
+@@ -349,6 +349,8 @@
+                                     newTransactionRow, newTransactionRank, newTransactionBank,
+                                     transaction->data, dramsimLog);
+             command->tag = transaction->tag;
++            command->phase3_epoch_bound = transaction->phase3_epoch_bound;
++            command->phase3_bound_epoch = transaction->phase3_bound_epoch;
+             commandQueue.enqueue(command);
+ 
+             // If we have a read, save the transaction so when the data comes back
+--- a/MemorySystem.cpp	2026-11-15 12:13:40.000000000 +0000
++++ b/MemorySystem.cpp	2026-11-25 11:44:56.000000000 +0000
+@@ -32,6 +32,9 @@
+ 
+ #include <unistd.h>
+ 
++#include "Phase1Address.h"
++#include "Phase3Bridge.h"
++
+ using namespace std;
+ 
+ ofstream cmd_verify_out;  // used in Rank.cpp and MemoryController.cpp if
+@@ -184,6 +187,20 @@
+ {
+     TransactionType type = isWrite ? DATA_WRITE : DATA_READ;
+     Transaction* trans = new Transaction(type, addr, str, data);
++    uint64_t bound = 0;
++    if (phase3TakeIssueEpoch(bound))
++    {
++        // Epoch captured when the request was queued, not when the controller accepts it.
++        trans->phase3_epoch_bound = true;
++        trans->phase3_bound_epoch = bound;
++    }
++    else if (phase3IsLogicalDataTag(str))
++    {
++        const Phase1Address codec(Phase1Address::fromConfiguration());
++        const Phase1AddrTuple tuple = codec.decode(addr);
++        trans->phase3_epoch_bound = true;
++        trans->phase3_bound_epoch = phase3LogicalEpoch(tuple.bank, tuple.row);
++    }
+     return addTransaction(trans);
+ }
+ 
+--- a/PIMRank.cpp	2026-11-15 14:42:36.000000000 +0000
++++ b/PIMRank.cpp	2026-11-25 11:44:54.000000000 +0000
+@@ -117,6 +117,7 @@
+         pimPC_ = 0;
+         lastJumpIdx_ = numJumpToBeTaken_ = lastRepeatIdx_ = numRepeatToBeDone_ = -1;
+         crfExit_ = false;
++        operandInvalid_ = false;
+         PRINTC(RED, OUTLOG_CH_RA("HAB_PIM"));
+     }
+     else
+@@ -168,6 +169,8 @@
+         for (int pb = 0; pb < config.NUM_PIM_BLOCKS; pb++)
+         {
+             rank->banks[pb * 2 + packet->bank].read(packet, Phase1AccessType::HAB, currentClockCycle);
++            if (packet->phase3_operand_denied)
++                operandInvalid_ = true;
+             pimBlocks[pb].grfB[grf_id] = *(packet->data);
+         }
+ #endif
+@@ -220,6 +223,10 @@
+     else  // PIM (only GRF) to Bank Move
+     {
+         PRINTC(GREEN, OUTLOG_ALL("PIM_TO_BANK"));
++        // A denied operand leaves the previous kernel's GRF in place. Writing
++        // that register, or a zeroed buffer, would publish a result.
++        if (operandInvalid_)
++            return;
+ 
+ #ifndef NO_STORAGE
+         int grf_id = getGrfIdx(packet->column);
+@@ -257,12 +264,16 @@
+             if (packet->bank % 2 != 0)
+                 PRINT("Warning, CRF bank coding and bank id from packet are inconsistent");
+             rank->banks[pb * 2].read(packet, Phase1AccessType::PIM_OPERAND, currentClockCycle);  // basically read from bank.
++            if (packet->phase3_operand_denied)
++                operandInvalid_ = true;
+             bst = *(packet->data);
+             return;
+         case PIMOpdType::ODD_BANK:
+             if (packet->bank % 2 == 0)
+                 PRINT("Warning, CRF bank coding and bank id from packet are inconsistent");
+             rank->banks[pb * 2 + 1].read(packet, Phase1AccessType::PIM_OPERAND, currentClockCycle);  // basically read from bank.
++            if (packet->phase3_operand_denied)
++                operandInvalid_ = true;
+             bst = *(packet->data);
+             return;
+         case PIMOpdType::GRF_A:
+@@ -429,12 +440,19 @@
+ 
+ void PIMRank::doPIMBlock(BusPacket* packet, PIMCmd cCmd, int pimblock_id)
+ {
++    if (packet != nullptr)
++        packet->phase3_operand_denied = false;
++    const auto denied = [packet]() {
++        return packet != nullptr && packet->phase3_operand_denied;
++    };
+     if (cCmd.type_ == PIMCmdType::FILL || cCmd.type_ == PIMCmdType::MOV)
+     {
+         BurstType bst;
+         bool is_auto = (cCmd.type_ == PIMCmdType::FILL) ? true : false;
+ 
+         readOpd(pimblock_id, bst, cCmd.src0_, packet, cCmd.src0Idx_, is_auto, false);
++        if (denied() || operandInvalid_)
++            return;
+         if (cCmd.isRelu_)
+         {
+             for (int i = 0; i < 16; i++)
+@@ -449,6 +467,8 @@
+         BurstType src1Bst;
+         readOpd(pimblock_id, src0Bst, cCmd.src0_, packet, cCmd.src0Idx_, cCmd.isAuto_, false);
+         readOpd(pimblock_id, src1Bst, cCmd.src1_, packet, cCmd.src1Idx_, cCmd.isAuto_, false);
++        if (denied() || operandInvalid_)
++            return;
+ 
+         if (cCmd.type_ == PIMCmdType::ADD)
+             // dstBst = src0Bst + src1Bst;
+@@ -468,6 +488,8 @@
+ 
+         readOpd(pimblock_id, src0Bst, cCmd.src0_, packet, cCmd.src0Idx_, cCmd.isAuto_, is_mac);
+         readOpd(pimblock_id, src1Bst, cCmd.src1_, packet, cCmd.src1Idx_, cCmd.isAuto_, is_mac);
++        if (denied())
++            return;
+         if (is_mac)
+         {
+             readOpd(pimblock_id, dstBst, cCmd.dst_, packet, cCmd.dstIdx_, cCmd.isAuto_, is_mac);
+@@ -481,11 +503,17 @@
+             // dstBst = src0Bst * src1Bst + src2Bst;
+             pimBlocks[pimblock_id].mad(dstBst, src0Bst, src1Bst, src2Bst);
+         }
++        if (denied() || operandInvalid_)
++            return;
+ 
+         writeOpd(pimblock_id, dstBst, cCmd.dst_, packet, cCmd.dstIdx_, cCmd.isAuto_, is_mac);
+     }
+     else if (cCmd.type_ == PIMCmdType::NOP && packet->busPacketType == WRITE)
+     {
++        // GRF_TO_BANK is this NOP. A blocked or stale operand must not become
++        // either a sum of zeros or a copy of the previous kernel's GRF.
++        if (operandInvalid_)
++            return;
+         int grf_id = getGrfIdx(packet->column);
+         if (packet->bank == 0)
+         {
+--- a/PIMRank.h	2026-11-15 14:42:33.000000000 +0000
++++ b/PIMRank.h	2026-11-25 11:33:37.000000000 +0000
+@@ -118,6 +118,7 @@
+ 
+     Rank* rank;
+     vector<PIMBlock> pimBlocks;
++    bool operandInvalid_ = false;
+ };
+ }  // namespace DRAMSim
+ #endif
+--- a/Phase1Feeder.cpp	2026-11-21 06:11:59.000000000 +0000
++++ b/Phase1Feeder.cpp	2026-11-25 11:45:00.000000000 +0000
+@@ -4,6 +4,7 @@
+ #include <stdexcept>
+ 
+ #include "Phase1Trace.h"
++#include "Phase3Bridge.h"
+ 
+ namespace DRAMSim
+ {
+@@ -101,6 +102,11 @@
+     decodeAddress(address, item->channel, item->rank, item->bank, item->row, item->column);
+     item->tag = tag;
+     item->access_path = tag;
++    if (phase3IsLogicalDataTag(tag))
++    {
++        item->phase3_epoch_bound = true;
++        item->phase3_bound_epoch = phase3LogicalEpoch(item->bank, item->row);
++    }
+     if (tag == "PROGRAM_CRF" || tag == "PIM")
+     {
+         item->location = Item::LocationKind::PIM_CONTROL;
+@@ -218,6 +224,8 @@
+     BurstType* data = front.is_write ? &front.payload : front.read_buffer;
+     if (data == nullptr)
+         throw std::logic_error("feeder transaction has no data pointer");
++    if (front.phase3_epoch_bound)
++        phase3ArmIssueEpoch(front.phase3_bound_epoch);
+     if (!MultiChannelMemorySystem::addTransaction(front.is_write, front.address, front.tag, data))
+     {
+         controller_rejections_++;
+--- a/Phase1Feeder.h	2026-11-21 06:11:59.000000000 +0000
++++ b/Phase1Feeder.h	2026-11-25 11:44:59.000000000 +0000
+@@ -111,6 +111,8 @@
+         LocationKind location = LocationKind::NORMAL;
+         std::string tag;
+         std::string access_path;
++        bool phase3_epoch_bound = false;
++        uint64_t phase3_bound_epoch = 0;
+         BurstType payload;           // stable copy for writes
+         BurstType* read_buffer = nullptr;  // caller-owned receive buffer
+         uint64_t sequence = 0;
+--- a/Phase1Reports.cpp	2026-11-26 12:34:38.882933855 +0000
++++ b/Phase1Reports.cpp	2026-11-25 04:41:28.000000000 +0000
+@@ -73,12 +73,13 @@
+         //   (((channel * num_banks + bank) * num_rows + row) * burst_columns
+         //     + burst_column) * 4 + codeword_index
+         const Phase1Geometry& geometry = address_.geometry();
++        const unsigned logicalRow = phase3LogicalRow(detection.actual_bank, detection.row);
+         item.region_type = "codeword";
+         item.region_id =
+             (((static_cast<uint64_t>(detection.channel) * num_banks_ +
+                detection.actual_bank) *
+                   geometry.num_rows +
+-              detection.row) *
++              logicalRow) *
+                  geometry.burst_columns() +
+              detection.burst_column) *
+                 4ULL +
+@@ -87,6 +88,11 @@
+ 
+     item.mapping_epoch = phase3MappingEpoch(detection.actual_bank, detection.row);
+     item.logical_row = phase3LogicalRow(detection.actual_bank, detection.row);
++    item.actual_bank = detection.actual_bank;
++    item.mapping_consistent =
++        phase3MappingAccepted(detection.actual_bank, item.logical_row, item.mapping_epoch);
++    if (is_ce)
++        phase3NoteCe(detection.actual_bank, detection.row);
+     if (pending_.size() >= capacity_)
+     {
+         dropped_++;
+@@ -119,6 +125,8 @@
+     report.region_id = front.region_id;
+     report.mapping_epoch = front.mapping_epoch;
+     report.logical_row = front.logical_row;
++    report.actual_bank = front.actual_bank;
++    report.mapping_consistent = front.mapping_consistent;
+     reports_.push_back(report);
+     latencies_.push_back(cycle - front.detect_cycle);
+     delivered_++;
+--- a/Phase1Reports.h	2026-11-26 12:34:38.882933855 +0000
++++ b/Phase1Reports.h	2026-11-25 04:41:27.000000000 +0000
+@@ -48,6 +48,8 @@
+     uint64_t region_id = 0;
+     uint64_t mapping_epoch = 0;
+     unsigned logical_row = 0;
++    unsigned actual_bank = 0;
++    bool mapping_consistent = true;
+ };
+ 
+ class Phase1ReportSink
+@@ -100,6 +102,8 @@
+         uint64_t region_id = 0;
+         uint64_t mapping_epoch = 0;
+         unsigned logical_row = 0;
++        unsigned actual_bank = 0;
++        bool mapping_consistent = true;
+     };
+ 
+     Phase1Address address_;
+--- a/Phase1Storage.cpp	2026-11-15 13:35:39.000000000 +0000
++++ b/Phase1Storage.cpp	2026-11-25 04:27:53.000000000 +0000
+@@ -2,6 +2,7 @@
+ 
+ #include <sstream>
+ #include <stdexcept>
++#include <utility>
+ 
+ namespace DRAMSim
+ {
+@@ -94,4 +95,29 @@
+     found->second.parity ^= static_cast<uint8_t>(1u << bit);
+ }
+ 
++void Phase1Storage::moveCodeword(const Phase1StorageKey& from, const Phase1StorageKey& to)
++{
++    if (from.row == to.row && from.burst_column == to.burst_column &&
++        from.codeword_index == to.codeword_index && from.actual_bank == to.actual_bank &&
++        from.channel == to.channel && from.rank == to.rank)
++        return;
++    auto source = entries_.find(from);
++    auto dest = entries_.find(to);
++    if (source == entries_.end() && dest == entries_.end())
++        return;
++    if (source != entries_.end() && dest == entries_.end())
++    {
++        entries_.emplace(to, source->second);
++        entries_.erase(source);
++        return;
++    }
++    if (source == entries_.end() && dest != entries_.end())
++    {
++        entries_.emplace(from, dest->second);
++        entries_.erase(dest);
++        return;
++    }
++    std::swap(source->second, dest->second);
++}
++
+ }  // namespace DRAMSim
+--- a/Phase1Storage.h	2026-11-15 13:35:36.000000000 +0000
++++ b/Phase1Storage.h	2026-11-25 04:27:47.000000000 +0000
+@@ -53,6 +53,11 @@
+     void injectDataBit(const Phase1StorageKey& key, unsigned bit);
+     void injectParityBit(const Phase1StorageKey& key, unsigned bit);
+ 
++    // Move one codeword to another row without decoding or re-encoding.
++    // Raw data, parity, and ecc_valid travel together, so an uncorrectable
++    // word stays uncorrectable at the destination and the source key is removed.
++    void moveCodeword(const Phase1StorageKey& from, const Phase1StorageKey& to);
++
+   private:
+     struct Entry
+     {
+--- a/Phase2Engine.cpp	2026-11-21 06:11:59.000000000 +0000
++++ b/Phase2Engine.cpp	2026-11-25 04:41:33.000000000 +0000
+@@ -7,6 +7,7 @@
+ #include <utility>
+ 
+ #include "Phase2Layout.h"
++#include "Phase3Bridge.h"
+ 
+ namespace DRAMSim
+ {
+@@ -235,6 +236,18 @@
+                                  bool report_overflow,
+                                  const Phase1Address& address) const
+ {
++    if (!phase3MappingAccepted(report.actual_bank, report.logical_row, report.mapping_epoch))
++    {
++        Decision decision;
++        decision.status = P2Status::STALE_EPOCH;
++        decision.window_end = t_ack;
++        decision.fallback_reasons.push_back("STALE_EPOCH");
++        const ExecutionPlan plan = planExecution(decision, ledger, &config, &gate);
++        decision.replay_runs = plan.replay_runs;
++        decision.coalesced_extra_tiles = plan.coalesced_extra_tiles;
++        return decision;
++    }
++
+     const ReportFootprint footprint = buildReportFootprint(report, address);
+     const ReportIndex index = buildReportIndex(footprint);
+ 
+@@ -576,6 +589,8 @@
+         plan.poison_outputs = affectedOutputs(decision, ledger);
+         return plan;
+     }
++    if (decision.status == P2Status::STALE_EPOCH)
++        return plan;
+     plan.restore_items = decision.restore_list.size();
+     plan.restore_bytes = 4096ULL * plan.restore_items;
+     std::vector<const OpEntry*> replay_ops;
+--- a/Phase2Ledger.cpp	2026-11-26 12:34:38.882933855 +0000
++++ b/Phase2Ledger.cpp	2026-11-25 14:19:44.000000000 +0000
+@@ -1,4 +1,5 @@
+ #include "Phase2Ledger.h"
++#include "Phase2Layout.h"
+ #include "Phase3Bridge.h"
+ 
+ #include <algorithm>
+@@ -43,7 +44,7 @@
+ void Ledger::recordIssue(uint64_t op_id, uint64_t t_issue)
+ {
+     OpEntry* entry = findMutable(op_id);
+-    if (entry == nullptr)
++    if (entry == nullptr || entry->t_issue != UINT64_MAX)
+         return;
+     entry->t_issue = t_issue;
+     for (DataRef& ref : entry->inputs)
+@@ -72,6 +73,45 @@
+     final_cache_.clear();
+ }
+ 
++void Ledger::observeAccess(uint64_t op_id, unsigned row, bool is_write)
++{
++    if (find(op_id) == nullptr)
++        return;
++    if (is_write)
++        observed_writes_[op_id].insert(row);
++    else
++        observed_reads_[op_id].insert(row);
++}
++
++bool Ledger::completeObserved(uint64_t op_id, uint64_t t_complete)
++{
++    OpEntry* entry = findMutable(op_id);
++    if (entry == nullptr)
++        return false;
++    if (entry->completed)
++        return true;
++    std::set<unsigned> expected_reads;
++    std::set<unsigned> expected_writes;
++    for (const DataRef& ref : entry->inputs)
++    {
++        if (!hasBaseRow(ref.operand))
++            return false;
++        expected_reads.insert(baseRow(ref.operand) + tileRowOffset(ref.tile));
++    }
++    for (const DataRef& ref : entry->outputs)
++    {
++        if (!hasBaseRow(ref.operand))
++            return false;
++        expected_writes.insert(baseRow(ref.operand) + tileRowOffset(ref.tile));
++    }
++    const std::set<unsigned>& seen_reads = observed_reads_[op_id];
++    const std::set<unsigned>& seen_writes = observed_writes_[op_id];
++    if (seen_reads != expected_reads || seen_writes != expected_writes)
++        return false;
++    recordComplete(op_id, t_complete);
++    return entry->completed;
++}
++
+ uint64_t Ledger::addCompleted(uint32_t job_id, uint16_t kernel_idx, uint32_t tile,
+                               const std::vector<std::pair<uint16_t, uint32_t>>& input_items,
+                               const std::vector<std::pair<uint16_t, uint32_t>>& output_items,
+--- a/Phase2Ledger.h	2026-11-21 06:11:59.000000000 +0000
++++ b/Phase2Ledger.h	2026-11-25 04:50:07.000000000 +0000
+@@ -26,6 +26,8 @@
+                     bool dep_complete = true);
+     void recordIssue(uint64_t op_id, uint64_t t_issue);
+     void recordComplete(uint64_t op_id, uint64_t t_complete);
++    void observeAccess(uint64_t op_id, unsigned row, bool is_write);
++    bool completeObserved(uint64_t op_id, uint64_t t_complete);
+     void setBaseRow(uint16_t operand, unsigned base_row) { base_rows_[operand] = base_row; }
+     bool hasBaseRow(uint16_t operand) const
+     {
+@@ -73,6 +75,8 @@
+     std::map<std::pair<uint16_t, uint32_t>, uint64_t> current_;
+     std::vector<HostRead> host_reads_;
+     std::map<uint16_t, unsigned> base_rows_;
++    std::map<uint64_t, std::set<unsigned>> observed_reads_;
++    std::map<uint64_t, std::set<unsigned>> observed_writes_;
+     std::map<DataRef, std::vector<uint64_t>> readers_;
+     std::map<DataRef, uint64_t> producers_;
+     mutable std::map<uint32_t, std::set<std::pair<uint16_t, uint32_t>>> final_cache_;
+--- a/Phase2Types.cpp	2026-11-21 06:11:59.000000000 +0000
++++ b/Phase2Types.cpp	2026-11-25 04:41:30.000000000 +0000
+@@ -17,6 +17,7 @@
+         case P2Status::SELECTIVE_RECOVERED: return "SELECTIVE_RECOVERED";
+         case P2Status::SOURCE_REPAIRED_ONLY: return "SOURCE_REPAIRED_ONLY";
+         case P2Status::BASELINE_B0: return "BASELINE_B0";
++        case P2Status::STALE_EPOCH: return "STALE_EPOCH";
+     }
+     return "UNKNOWN";
+ }
+--- a/Phase2Types.h	2026-11-26 12:34:38.882933855 +0000
++++ b/Phase2Types.h	2026-11-25 04:41:29.000000000 +0000
+@@ -39,7 +39,8 @@
+     PARTIAL_WITH_ESCAPE,
+     SELECTIVE_RECOVERED,
+     SOURCE_REPAIRED_ONLY,
+-    BASELINE_B0
++    BASELINE_B0,
++    STALE_EPOCH
+ };
+ 
+ enum class Lifecycle
+--- a/Transaction.h	2026-11-15 12:13:40.000000000 +0000
++++ b/Transaction.h	2026-11-25 11:27:34.000000000 +0000
+@@ -59,6 +59,8 @@
+     uint64_t timeAdded;
+     uint64_t timeReturned;
+     std::string tag;
++    bool phase3_epoch_bound = false;
++    uint64_t phase3_bound_epoch = 0;
+ 
+     friend ostream& operator<<(ostream& os, const Transaction& t);
+     // functions

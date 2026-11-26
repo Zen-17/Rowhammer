@@ -3,6 +3,11 @@
 
 The patches add mapping_epoch and the physical-to-logical translation result.
 They do not change B2 recovery decisions or the public report CSV columns.
+
+Stage 4–5 behavior (moveCodeword, STALE_EPOCH, observeAccess,
+phase3_operand_denied, epoch-bound requests) is applied afterwards by
+apply_stage4_hooks.py from sim_hooks/stage4_overlay/.  Do not re-edit the
+generated build tree for those symbols.
 """
 from __future__ import annotations
 
@@ -40,28 +45,11 @@ EXCHANGE = r'''
                 from.codeword_index = word;
                 Phase1StorageKey to = from;
                 to.row = dest;
-                const bool hasFrom = phase1Storage_.contains(from);
-                const bool hasTo = phase1Storage_.contains(to);
-                uint64_t fromData = 0;
-                uint64_t toData = 0;
-                bool fromRaw = false;
-                bool toRaw = false;
-                if (hasFrom)
-                {
-                    const Phase1EccResult decoded = phase1Storage_.readProtected(from);
-                    fromRaw = decoded.status == Phase1EccStatus::UNCORRECTABLE;
-                    fromData = fromRaw ? phase1Storage_.readRawData(from) : decoded.data;
-                }
-                if (hasTo)
-                {
-                    const Phase1EccResult decoded = phase1Storage_.readProtected(to);
-                    toRaw = decoded.status == Phase1EccStatus::UNCORRECTABLE;
-                    toData = toRaw ? phase1Storage_.readRawData(to) : decoded.data;
-                }
-                if (hasFrom && !fromRaw)
-                    phase1Storage_.writeLegal(to, fromData);
-                if (hasTo && !toRaw)
-                    phase1Storage_.writeLegal(from, toData);
+                // Keep the stored word and its parity.  Re-encoding here would
+                // turn a correctable fault into a clean word and would drop an
+                // uncorrectable word off the destination row.
+                // Stage 4 overlay replaces this Bank.h after apply_m2_hooks.
+                phase1Storage_.moveCodeword(from, to);
             }
         }
     }

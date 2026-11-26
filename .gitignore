@@ -33,3 +33,4 @@ pim-phase1/simulator/data/
 # Phase 3 caches, local tools, and simulator build artifacts
 phase3_exp/build/
 phase3_exp/.tools/
+phase3_exp/sim_hooks/captured_build_src/

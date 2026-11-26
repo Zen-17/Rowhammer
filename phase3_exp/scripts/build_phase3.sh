@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # Build a Phase 3 simulator tree.  Phase 1 and Phase 2 sources are copied, not edited.
+#
+# DANGER: this script starts with `rm -rf "$BUILD"`.  Stage 4–5 patches used
+# to live only in that generated tree.  They are now reapplied from
+# sim_hooks/stage4_overlay via apply_stage4_hooks.py.  Do not comment that
+# step out, and do not patch build/simulator/src as if it were source.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,6 +22,8 @@ SCONS="${SCONS:-$ROOT/.tools/bin/scons}"
 test -f "$P1/simulator/Sconstruct"
 test -d "$P2/overlay/src"
 test -f "$ROOT/sim_hooks/ActivationObserver.cpp"
+test -f "$ROOT/sim_hooks/stage4_overlay/Phase1Storage.cpp"
+test -f "$ROOT/sim_hooks/apply_stage4_hooks.py"
 
 rm -rf "$BUILD"
 mkdir -p "$BUILD"
@@ -30,6 +37,7 @@ cp "$ROOT/sim_hooks/Phase3M0Test.cpp" "$ROOT/sim_hooks/Phase3M1Test.cpp" "$ROOT/
 "$ANACONDA/bin/python3" "$ROOT/sim_hooks/apply_rank_hook.py" "$BUILD/src/Rank.cpp"
 "$ANACONDA/bin/python3" "$ROOT/sim_hooks/apply_m2_hooks.py" "$BUILD"
 "$ANACONDA/bin/python3" "$ROOT/sim_hooks/apply_gemv_hook.py" "$BUILD/src/tests/PIMKernel.cpp"
+"$ANACONDA/bin/python3" "$ROOT/sim_hooks/apply_stage4_hooks.py" "$BUILD"
 "$ANACONDA/bin/python3" - "$BUILD/Sconstruct" "$ANACONDA" <<'PY'
 import pathlib, sys
 path, anaconda = sys.argv[1:]
