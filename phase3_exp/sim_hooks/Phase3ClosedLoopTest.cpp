@@ -954,9 +954,7 @@ unsigned selectAggressor(const ClosedLoopOptions& opts, ClosedLoopSession& sessi
         }
         else
         {
-            const unsigned nRegions = RegionMap::kRows / opts.regionN;
-            const unsigned decoyRegion = (vicRegion + 2u) % nRegions;
-            const unsigned decoyBase = decoyRegion * opts.regionN;
+            const unsigned decoyBase = 6144u;
             aggressor = decoyBase + ((slot - 1u) % opts.regionN);
         }
     }
