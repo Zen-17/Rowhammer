@@ -1,0 +1,81 @@
+{
+  "criterion_1_pass": true,
+  "criterion_1_notes": [],
+  "criterion_2_evaluated": true,
+  "criterion_2_all_z_pass": true,
+  "ablations_eval": {
+    "OURS-EPOCH": {
+      "A1": {
+        "max_abs_z": 43.37049688440288,
+        "best_metric": "o6_flag"
+      },
+      "A3": {
+        "max_abs_z": 3.3166247903554003,
+        "best_metric": "o6_flag"
+      }
+    },
+    "OURS-SCRUB": {
+      "A1": {
+        "max_abs_z": 0.46989741004821717,
+        "best_metric": "cycles"
+      },
+      "A3": {
+        "max_abs_z": 4.02791264398305,
+        "best_metric": "latent_flips"
+      }
+    },
+    "OURS-G1.5": {
+      "A3": {
+        "max_abs_z": 51.55362250016606,
+        "best_metric": "cycles"
+      },
+      "A1": {
+        "max_abs_z": 897.1729782062743,
+        "best_metric": "cycles"
+      }
+    },
+    "OURS-DET": {
+      "A3": {
+        "max_abs_z": 9.723810028755327,
+        "best_metric": "cycles"
+      },
+      "A1": {
+        "max_abs_z": 200.76650665716983,
+        "best_metric": "cycles"
+      }
+    },
+    "OURS-CE": {
+      "A1": {
+        "max_abs_z": 0.46989741004821717,
+        "best_metric": "cycles"
+      },
+      "A3": {
+        "max_abs_z": 5.829373041518926,
+        "best_metric": "cycles"
+      }
+    }
+  },
+  "scheme_passes": {
+    "OURS-CE": {
+      "max_z": 5.829373041518926,
+      "passed": true
+    },
+    "OURS-SCRUB": {
+      "max_z": 4.02791264398305,
+      "passed": true
+    },
+    "OURS-EPOCH": {
+      "max_z": 43.37049688440288,
+      "passed": true
+    },
+    "OURS-G1.5": {
+      "max_z": 897.1729782062743,
+      "passed": true
+    },
+    "OURS-DET": {
+      "max_z": 200.76650665716983,
+      "passed": true
+    }
+  },
+  "status": "PASS"
+}
