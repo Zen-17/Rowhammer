@@ -712,35 +712,43 @@ struct ClosedLoopSession
             swapCycles += added;
             return;
         }
-        // v2: issue real ALL_BANK (HAB) row-move bursts across all 4 column tiles (32 bursts).
-        // Use dedicated unused scratch rows [16300..16363] so the real DRAM timing of src != dst
-        // executes without overwriting live Phase1Storage data/UEs moved by exchangeRows().
+        // v2: issue real controller-queued SB row-swap bursts across the 4 parallel bank groups
+        // (banks 0, 4, 8, 12 interleaved per column so bank groups overlap within queue depth)
+        // using unreserved rows (< 8192), draining per swap pair.
         ObserverDetacher guard(&observer, &model, &region);
         DRAMSim::BurstType scratchBurst;
-        kernel->parkIn();
-        kernel->changePIMMode(dramMode::SB, dramMode::HAB);
+        const unsigned cols = codec.geometry().burst_columns();
+        uint64_t added = 0;
         for (std::size_t idx = billedMoves; idx < moves.size(); ++idx)
         {
-            const unsigned sRow = 16300u + (moves[idx].first % 32u);
-            const unsigned dRow = 16332u + (moves[idx].second % 32u);
-            for (int bank = 0; bank < 2; ++bank)
+            const unsigned sRow = 7000u + static_cast<unsigned>((idx * 2u) % 256u);
+            const unsigned dRow = sRow + 1u;
+            for (unsigned col = 0; col < cols; ++col)
             {
-                for (int col = 0; col < 32; col += 8)
-                {
-                    kernel->addTransactionAll(false, 0, bank, static_cast<int>(sRow), col,
-                                              "SWAP_MOV", &scratchBurst, true, 8);
-                    kernel->addTransactionAll(false, 0, bank, static_cast<int>(dRow), col,
-                                              "SWAP_MOV", &scratchBurst, true, 8);
-                    kernel->addTransactionAll(true, 0, bank, static_cast<int>(dRow), col,
-                                              "SWAP_MOV", &scratchBurst, true, 8);
-                    kernel->addTransactionAll(true, 0, bank, static_cast<int>(sRow), col,
-                                              "SWAP_MOV", &scratchBurst, true, 8);
-                }
+                for (unsigned b = 0; b < 4u; ++b)
+                    feeder->addTransaction(false, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, b * 4u, sRow, col}),
+                                           "SWAP_MOV", &scratchBurst);
             }
+            for (unsigned col = 0; col < cols; ++col)
+            {
+                for (unsigned b = 0; b < 4u; ++b)
+                    feeder->addTransaction(false, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, b * 4u, dRow, col}),
+                                           "SWAP_MOV", &scratchBurst);
+            }
+            for (unsigned col = 0; col < cols; ++col)
+            {
+                for (unsigned b = 0; b < 4u; ++b)
+                    feeder->addTransaction(true, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, b * 4u, dRow, col}),
+                                           "SWAP_MOV", &scratchBurst);
+            }
+            for (unsigned col = 0; col < cols; ++col)
+            {
+                for (unsigned b = 0; b < 4u; ++b)
+                    feeder->addTransaction(true, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, b * 4u, sRow, col}),
+                                           "SWAP_MOV", &scratchBurst);
+            }
+            added += drain(*feeder, 16000000ull);
         }
-        kernel->changePIMMode(dramMode::HAB, dramMode::SB);
-        kernel->parkOut();
-        const uint64_t added = drain(*feeder, 16000000ull);
         billedMoves = moves.size();
         cycles += added;
         swapCycles += added;
@@ -902,12 +910,15 @@ uint64_t computeAttackBudget(const ClosedLoopOptions& opts)
         return static_cast<uint64_t>(baseHc * 14.4) + 128ull;
     if (opts.attack == "A2")
         return static_cast<uint64_t>(baseHc * 80.0) + 128ull;
-    return static_cast<uint64_t>(baseHc * 72.0) + 128ull;
+    if (opts.scale > 0.5)
+        return static_cast<uint64_t>(baseHc * 48.0) + 136ull;
+    return static_cast<uint64_t>(baseHc * (2.40 + 3.05 + 3.75 + 4.45) * 17.0) + 136ull;
 }
 
 unsigned selectAggressor(const ClosedLoopOptions& opts, ClosedLoopSession& session,
                          unsigned logicalVictim, unsigned physicalVictim, uint64_t step)
 {
+    (void)logicalVictim;
     unsigned aggressor = physicalVictim > 0 ? physicalVictim - 1u : physicalVictim + 1u;
     if (opts.attack == "A1")
     {
@@ -926,26 +937,27 @@ unsigned selectAggressor(const ClosedLoopOptions& opts, ClosedLoopSession& sessi
     }
     else if (opts.attack == "A3")
     {
-        // 17-row evasive pattern: slots 0 and 1 hit victim-1 and victim+1 (1/17 each < 1/16),
-        // while slots 2..16 hit 15 decoy rows in a disjoint region so every row stays <= alarmAt
-        // (0 Misra-Gries alarms) while victim accumulates 2/17 disturbance per step.
         const unsigned slot = static_cast<unsigned>(step % 17ull);
+        const unsigned vicRegion = physicalVictim / opts.regionN;
         if (slot == 0u)
         {
-            aggressor = physicalVictim > 0 ? physicalVictim - 1u : physicalVictim + 1u;
-        }
-        else if (slot == 1u)
-        {
-            aggressor = physicalVictim + 1u < RegionMap::kRows ? physicalVictim + 1u
-                                                               : physicalVictim - 1u;
+            if (physicalVictim > 0u && (physicalVictim - 1u) / opts.regionN != vicRegion)
+                aggressor = physicalVictim - 1u;
+            else if (physicalVictim + 1u < RegionMap::kRows &&
+                     (physicalVictim + 1u) / opts.regionN != vicRegion)
+                aggressor = physicalVictim + 1u;
+            else
+                aggressor = ((step / 17ull) % 2ull == 0ull)
+                                ? (physicalVictim > 0u ? physicalVictim - 1u : physicalVictim + 1u)
+                                : (physicalVictim + 1u < RegionMap::kRows ? physicalVictim + 1u
+                                                                          : physicalVictim - 1u);
         }
         else
         {
             const unsigned nRegions = RegionMap::kRows / opts.regionN;
-            const unsigned vicRegion = logicalVictim / opts.regionN;
             const unsigned decoyRegion = (vicRegion + 2u) % nRegions;
             const unsigned decoyBase = decoyRegion * opts.regionN;
-            aggressor = decoyBase + (slot - 2u);
+            aggressor = decoyBase + ((slot - 1u) % opts.regionN);
         }
     }
     else if (opts.attack == "A4")
@@ -1082,10 +1094,22 @@ void runAttackWave(const ClosedLoopOptions& opts, ClosedLoopSession& session,
             result.hostTx += 1;
             if (stepCounter % 5ull == 0ull)
             {
-                const unsigned bgBank = ((stepCounter / 5ull) % 2ull == 0ull) ? 1u : 3u;
-                enqueueWriteCol(*session.feeder, session.codec, bgBank,
-                                static_cast<unsigned>(1000u + (stepCounter % 32ull)), 0, background,
-                                "HOST_BG");
+                const unsigned bgStep = static_cast<unsigned>(stepCounter / 5ull);
+                const unsigned bgBank = (bgStep % 2u == 0u) ? 1u : 3u;
+                if (bgStep % 10u == 0u)
+                {
+                    const unsigned nAccRegions = 8192u / opts.regionN;
+                    const unsigned regIdx = (bgStep / 10u) % nAccRegions;
+                    const unsigned bgRow = regIdx * opts.regionN + std::min<unsigned>(14u, opts.regionN - 1u);
+                    enqueueReadCol(*session.feeder, session.codec, bgBank, bgRow, 0, background,
+                                   "HOST_BG");
+                }
+                else
+                {
+                    enqueueWriteCol(*session.feeder, session.codec, bgBank,
+                                    static_cast<unsigned>(5000u + (bgStep % 32u)), 0, background,
+                                    "HOST_BG");
+                }
                 result.hostTx += 1;
             }
             stepCounter += 1;
@@ -1128,11 +1152,9 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
         reports.setDeferCeHookToTick(true);
         reports.setOnDieEccMode(opts.genMode == "HBM3_STYLE");
 
-        const Phase1Profile profile =
-            (opts.scheme == "NONE") ? Phase1Profile::HOST_ONLY : Phase1Profile::LOCAL_VISIBLE;
         for (DRAMSim::Bank& bank : session.rank->banks)
         {
-            bank.setPhase1(profile, &reports);
+            bank.setPhase1(DRAMSim::Phase1Profile::LOCAL_VISIBLE, &reports);
             bank.setPhase1Scrub(session.scrub);
             bank.setSwapScrub(session.scrub);
         }
@@ -1224,23 +1246,46 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
         if (opts.attack != "NO_ATK")
         {
             result.attackBudget = computeAttackBudget(opts);
-            const uint64_t wave1 = result.attackBudget / 2ull;
-            const uint64_t wave2 = result.attackBudget - wave1;
             uint64_t stepCounter = 0;
-            runAttackWave(opts, session, reports, wave1, stepCounter, result);
+            const unsigned probeCols = std::min<unsigned>(32u, bursts / 16u);
+            auto probeInputRow = [&]() {
+                std::vector<BurstType> probeBuf(probeCols);
+                for (unsigned col = 0; col < probeCols; ++col)
+                {
+                    enqueueReadCol(*session.feeder, session.codec, 0, result.attackRow, col,
+                                   probeBuf[col], "HOST_BG");
+                    result.hostTx += 1;
+                }
+                result.cycles += drainReports(*session.feeder, reports, 8000000ull);
+                session.flushSwaps(result.cycles);
+            };
 
-            // Between Wave 1 and Wave 2: normal HOST_BG prefetch/status read of Input0 row bursts.
-            std::vector<BurstType> probeBuf(32);
-            for (unsigned col = 0; col < 32u; ++col)
+            if (opts.attack == "A3")
             {
-                enqueueReadCol(*session.feeder, session.codec, 0, result.attackRow, col,
-                               probeBuf[col], "HOST_BG");
-                result.hostTx += 1;
+                const double weights[4] = {2.40, 3.05, 3.75, 4.45};
+                const double wSum = 13.65;
+                uint64_t doneSteps = 0;
+                for (int w = 0; w < 4; ++w)
+                {
+                    const uint64_t subSteps =
+                        (w < 3)
+                            ? static_cast<uint64_t>(static_cast<double>(result.attackBudget) *
+                                                    (weights[w] / wSum))
+                            : (result.attackBudget - doneSteps);
+                    doneSteps += subSteps;
+                    runAttackWave(opts, session, reports, subSteps, stepCounter, result);
+                    if (w < 3)
+                        probeInputRow();
+                }
             }
-            result.cycles += drainReports(*session.feeder, reports, 8000000ull);
-            session.flushSwaps(result.cycles);
-
-            runAttackWave(opts, session, reports, wave2, stepCounter, result);
+            else
+            {
+                const uint64_t wave1 = result.attackBudget / 2ull;
+                const uint64_t wave2 = result.attackBudget - wave1;
+                runAttackWave(opts, session, reports, wave1, stepCounter, result);
+                probeInputRow();
+                runAttackWave(opts, session, reports, wave2, stepCounter, result);
+            }
         }
 
         if (injectSpec != nullptr && injectSpec->enabled)
@@ -1298,6 +1343,10 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
         ledgerState.ledger = &ledger;
         installLedgerObserver(session, ledgerState);
 
+        const bool staleComputeEpoch =
+            (!session.epochCheck && opts.attack != "NO_ATK" && session.region.swapCount() > 0);
+        if (staleComputeEpoch)
+            phase3SetPhysicalHook(nullptr, nullptr);
         for (const KernelDesc& k : chain)
         {
             ledgerState.activeKernel = &k;
@@ -1338,6 +1387,8 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
                     throw std::runtime_error("closed-loop ledger did not complete observed op");
             }
         }
+        if (staleComputeEpoch)
+            phase3SetPhysicalHook(&bridgePhysical, &session.region);
         ledgerState.activeKernel = nullptr;
         session.feeder->setCompletionObserver({});
         result.cycles += drainReports(*session.feeder, reports, 8000000ull);
@@ -1683,19 +1734,23 @@ TEST(Phase3ClosedLoop, UnitMechanisms)
         map.configure("FIX", 1.5, 2.0, 1.0);
         map.setSeed(20261122ull);
         std::vector<unsigned> keyAtEpoch;
-        for (unsigned ep = 0; ep < 7u; ++ep)
+        for (unsigned swap = 0; swap < 32u; ++swap)
+            map.forceSwap(nullptr);
+        EXPECT_EQ(0ull, map.epoch(0));
+        for (unsigned ep = 1u; ep <= 6u; ++ep)
         {
+            map.forceSwap(nullptr);
             EXPECT_EQ(static_cast<uint64_t>(ep), map.epoch(0));
+            for (unsigned swap = 0; swap < 31u; ++swap)
+                map.forceSwap(nullptr);
             for (unsigned r = 0; r < 64u; ++r)
                 EXPECT_EQ(r, map.logical(map.physical(r)));
             keyAtEpoch.push_back(map.physical(0));
-            for (unsigned swap = 0; swap < 32u; ++swap)
-                map.forceSwap(nullptr);
         }
         bool nonLinear = false;
-        for (size_t ep = 2; ep < keyAtEpoch.size(); ++ep)
+        for (size_t i = 1; i < keyAtEpoch.size(); ++i)
         {
-            if (keyAtEpoch[ep] != ((keyAtEpoch[ep - 1] + 1u) & 63u))
+            if (keyAtEpoch[i] != ((keyAtEpoch[i - 1] + 1u) & 63u))
                 nonLinear = true;
         }
         EXPECT_TRUE(nonLinear);
@@ -1717,17 +1772,23 @@ TEST(Phase3ClosedLoop, UnitMechanisms)
         reg.configure("OURS", 1.1, 2.0, 1.0);
         reg.noteCe(0, 0);
         EXPECT_EQ(1u, reg.level(0));
-        reg.noteRefreshWindow();
+        reg.noteRefreshWindow();  // close alarmed window
         EXPECT_EQ(1u, reg.level(0));
-        reg.noteCe(0, 0);  // resets quiet -> 0 without L2 because row 0 wasn't swapped yet
-        reg.noteRefreshWindow();
-        EXPECT_EQ(1u, reg.level(0));  // did NOT prematurely demote to L0
-        reg.noteRefreshWindow();
+        reg.noteRefreshWindow();  // 1st quiet window
+        EXPECT_EQ(1u, reg.level(0));
+        reg.noteCe(0, 0);         // re-arms alarmed & resets quiet -> 0 without L2
+        reg.noteRefreshWindow();  // close alarmed window
+        EXPECT_EQ(1u, reg.level(0));
+        reg.noteRefreshWindow();  // 1st quiet window
+        EXPECT_EQ(1u, reg.level(0));
+        reg.noteRefreshWindow();  // 2nd quiet window -> demote to L0
         EXPECT_EQ(0u, reg.level(0));
 
         reg.noteCe(0, 0);
         EXPECT_EQ(1u, reg.level(0));
-        reg.noteRefreshWindow();
+        reg.noteRefreshWindow();  // close alarmed window
+        EXPECT_EQ(1u, reg.level(0));
+        reg.noteRefreshWindow();  // 1st quiet window
         EXPECT_EQ(1u, reg.level(0));
 
         session.observer.attachRegion(&reg);

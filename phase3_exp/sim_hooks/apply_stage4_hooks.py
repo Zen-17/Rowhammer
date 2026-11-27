@@ -18,6 +18,7 @@ FILES = (
     "Bank.cpp",
     "Bank.h",
     "BusPacket.h",
+    "CommandQueue.cpp",
     "MemoryController.cpp",
     "MemorySystem.cpp",
     "PIMRank.cpp",

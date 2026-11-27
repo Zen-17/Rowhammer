@@ -39,6 +39,7 @@ SUMMARY_FIELDS = [
     "o6_rate", "wilson_low", "wilson_high", "zero_escape_upper",
     "mean_latent_flips", "mean_flips", "mean_cycles", "mean_effective_throughput"
 ]
+SCHEMES = ["NONE", "REACT", "PARA", "FIX", "ADA", "OURS"]
 ABLATIONS = ["OURS-CE", "OURS-SCRUB", "OURS-EPOCH", "OURS-G1.5", "OURS-DET"]
 WORKERS = int(os.environ.get("M3_WORKERS", str(min(96, max(4, (os.cpu_count() or 8) - 8)))))
 
