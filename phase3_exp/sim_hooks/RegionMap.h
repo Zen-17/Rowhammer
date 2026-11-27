@@ -73,6 +73,8 @@ class RegionMap
     void setParaProbability(double probability);
     double paraProbability() const { return paraP_; }
     uint64_t paraCommands() const { return paraCommands_; }
+    uint64_t paraSbCommands() const { return paraSbCommands_; }
+    uint64_t paraAbCommands() const { return paraAbCommands_; }
     unsigned migrationSource(unsigned region) const;
     uint64_t commandCount() const { return commands_; }
     const std::vector<Transition>& transitions() const { return transitions_; }
@@ -120,6 +122,8 @@ class RegionMap
     uint64_t swaps_ = 0;
     uint64_t commands_ = 0;
     uint64_t paraCommands_ = 0;
+    uint64_t paraSbCommands_ = 0;
+    uint64_t paraAbCommands_ = 0;
     uint64_t rng_ = 0x9E3779B97F4A7C15ull;
     double paraP_ = 0;
     double lastG_ = 1.5;

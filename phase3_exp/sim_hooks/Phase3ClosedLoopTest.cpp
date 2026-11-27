@@ -205,6 +205,13 @@ struct ClosedLoopOptions
         return 1.5;
     }
 
+    double effectiveParaP() const
+    {
+        if (scheme == "PARA" && scale < 1.0 && scale > 0.0)
+            return std::min(1.0, paraP / scale);
+        return paraP;
+    }
+
     bool effectiveScrub() const
     {
         if (disableSwapScrub)
@@ -602,6 +609,9 @@ struct ClosedLoopSession
     bool epochCheck = true;
     uint64_t swapCycles = 0;
     std::size_t billedMoves = 0;
+    uint64_t paraCycles = 0;
+    uint64_t billedParaSb = 0;
+    uint64_t billedParaAb = 0;
 
     ClosedLoopSession(const std::string& deviceIni, const std::string& systemIni,
                       const std::string& outDir, const ClosedLoopOptions& opts)
@@ -640,9 +650,7 @@ struct ClosedLoopSession
         region.setCeFeedback(ceFeedback);
         if (!detector)
         {
-            const bool allowCeFast = (opts.scheme == "OURS-DET" || opts.disableDetector) &&
-                                     ceFeedback;
-            region.setDetectorEnabled(false, allowCeFast);
+            region.setDetectorEnabled(false, false);
         }
         else
         {
@@ -651,7 +659,7 @@ struct ClosedLoopSession
 
         if (!epochCheck)
         {
-            region.setEpochCorrupt(opts.corruptEpochMap);
+            region.setEpochCorrupt(true);
             region.setEpochCheck(false);
             phase3SetLateReportTranslation(true);
             phase3SetReportEpochRelaxed(true);
@@ -664,7 +672,7 @@ struct ClosedLoopSession
             phase3SetReportEpochRelaxed(true);
         }
 
-        region.setParaProbability(opts.paraP);
+        region.setParaProbability(opts.effectiveParaP());
         region.setDeferSwaps(true);
 
         model.configure(opts.seed, opts.scale, opts.genMode);
@@ -754,10 +762,68 @@ struct ClosedLoopSession
         swapCycles += added;
     }
 
+    void billPara(uint64_t& cycles)
+    {
+        const uint64_t freshSb = region.paraSbCommands() - billedParaSb;
+        const uint64_t freshAb = region.paraAbCommands() - billedParaAb;
+        if (freshSb == 0 && freshAb == 0)
+            return;
+        billedParaSb = region.paraSbCommands();
+        billedParaAb = region.paraAbCommands();
+        if (swapMode == "v1")
+        {
+            const uint64_t added = freshSb * 2ull * 47ull + freshAb * 4ull * 47ull;
+            cycles += added;
+            paraCycles += added;
+            return;
+        }
+        ObserverDetacher guard(&observer, &model, &region);
+        DRAMSim::BurstType scratchBurst;
+        uint64_t added = 0;
+        uint64_t queuedTriggers = 0;
+        for (uint64_t k = 0; k < freshSb; ++k)
+        {
+            const unsigned row = 7260u + static_cast<unsigned>((k * 2u) % 64u);
+            feeder->addTransaction(false, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, 0, row, 0}),
+                                   "PARA_REF", &scratchBurst);
+            feeder->addTransaction(false,
+                                   codec.encode(DRAMSim::Phase1AddrTuple{0, 0, 0, row + 1u, 0}),
+                                   "PARA_REF", &scratchBurst);
+            queuedTriggers += 1;
+            if (queuedTriggers % 16ull == 0ull)
+                added += drain(*feeder, 16000000ull);
+        }
+        for (uint64_t k = 0; k < freshAb; ++k)
+        {
+            const unsigned row = 7260u + static_cast<unsigned>((k * 2u) % 64u);
+            for (unsigned b = 0; b < 4u; ++b)
+            {
+                for (unsigned sub = 0; sub < 2u; ++sub)
+                {
+                    const unsigned bank = b * 4u + sub;
+                    feeder->addTransaction(
+                        false, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, bank, row, 0}),
+                        "PARA_REF", &scratchBurst);
+                    feeder->addTransaction(
+                        false, codec.encode(DRAMSim::Phase1AddrTuple{0, 0, bank, row + 1u, 0}),
+                        "PARA_REF", &scratchBurst);
+                }
+            }
+            queuedTriggers += 1;
+            if (queuedTriggers % 16ull == 0ull)
+                added += drain(*feeder, 16000000ull);
+        }
+        if (queuedTriggers % 16ull != 0ull)
+            added += drain(*feeder, 16000000ull);
+        cycles += added;
+        paraCycles += added;
+    }
+
     void flushSwaps(uint64_t& cycles)
     {
         region.flush(&model);
         billMoves(cycles);
+        billPara(cycles);
     }
 };
 
@@ -876,10 +942,12 @@ struct ClosedLoopResult
     uint64_t scrubWrites = 0;
     uint64_t scrubCycles = 0;
     uint64_t swapCycles = 0;
+    uint64_t paraCycles = 0;
     uint64_t restoredTiles = 0;
     uint64_t modelScrubs = 0;
     unsigned computeErrors = 0;
     unsigned committedMismatch = 0;
+    unsigned misrecovered = 0;
     unsigned level = 0;
     unsigned scoreRow = 0;
     unsigned attackRow = 0;
@@ -1247,6 +1315,8 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
             uint64_t stepCounter = 0;
             const unsigned probeCols = std::min<unsigned>(32u, bursts / 16u);
             auto probeInputRow = [&]() {
+                for (DRAMSim::Bank& bank : session.rank->banks)
+                    bank.setPhase1Scrub(false);
                 std::vector<BurstType> probeBuf(probeCols);
                 for (unsigned col = 0; col < probeCols; ++col)
                 {
@@ -1256,6 +1326,8 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
                 }
                 result.cycles += drainReports(*session.feeder, reports, 8000000ull);
                 session.flushSwaps(result.cycles);
+                for (DRAMSim::Bank& bank : session.rank->banks)
+                    bank.setPhase1Scrub(session.scrub);
             };
 
             if (opts.attack == "A3")
@@ -1341,10 +1413,6 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
         ledgerState.ledger = &ledger;
         installLedgerObserver(session, ledgerState);
 
-        const bool staleComputeEpoch =
-            (!session.epochCheck && opts.attack != "NO_ATK" && session.region.swapCount() > 0);
-        if (staleComputeEpoch)
-            phase3SetPhysicalHook(nullptr, nullptr);
         for (const KernelDesc& k : chain)
         {
             ledgerState.activeKernel = &k;
@@ -1385,8 +1453,6 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
                     throw std::runtime_error("closed-loop ledger did not complete observed op");
             }
         }
-        if (staleComputeEpoch)
-            phase3SetPhysicalHook(&bridgePhysical, &session.region);
         ledgerState.activeKernel = nullptr;
         session.feeder->setCompletionObserver({});
         result.cycles += drainReports(*session.feeder, reports, 8000000ull);
@@ -1440,6 +1506,9 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
                 const phase2::Decision decision = engine.analyze(
                     report, completedAt, config, ledger, gate, view, reports.overflow(), session.codec);
                 result.recovery = phase2::p2StatusName(decision.status);
+                if (decision.status == phase2::P2Status::STALE_EPOCH ||
+                    (!session.epochCheck && decision.status == phase2::P2Status::SOURCE_REPAIRED_ONLY))
+                    result.misrecovered += 1;
                 if (decision.status == phase2::P2Status::STALE_EPOCH)
                     continue;
                 if (decision.status == phase2::P2Status::OUTSIDE_WINDOW_NO_TRUSTED_INPUT)
@@ -1552,7 +1621,9 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
         result.scrubCycles = hbm2ScrubCycles(result.scrubWrites);
         result.cycles += result.scrubCycles;
         session.billMoves(result.cycles);
+        session.billPara(result.cycles);
         result.swapCycles = session.swapCycles;
+        result.paraCycles = session.paraCycles;
         result.flips = session.model.cumulativeFlips() - flipsBefore;
         result.latent =
             countLatentFaults(*session.rank, session.region, trackedRows,
@@ -1625,6 +1696,7 @@ std::string resultToJson(const ClosedLoopOptions& opts, const ClosedLoopResult& 
          << ",\"withheld\":" << (result.withheld ? "true" : "false")
          << ",\"recovery_failed\":" << (result.recoveryFailed ? "true" : "false")
          << ",\"para_p\":" << opts.paraP
+         << ",\"effective_para_p\":" << opts.effectiveParaP()
          << ",\"phase2_status\":\"" << result.phase2Status << "\""
          << ",\"recovery_status\":\"" << result.recovery << "\""
          << ",\"ce\":" << result.ce
@@ -1633,10 +1705,12 @@ std::string resultToJson(const ClosedLoopOptions& opts, const ClosedLoopResult& 
          << ",\"scrub_writes\":" << result.scrubWrites
          << ",\"scrub_cycles\":" << result.scrubCycles
          << ",\"swap_cycles\":" << result.swapCycles
+         << ",\"para_cycles\":" << result.paraCycles
          << ",\"restored_tiles\":" << result.restoredTiles
          << ",\"model_scrubs\":" << result.modelScrubs
          << ",\"compute_errors\":" << result.computeErrors
          << ",\"committed_mismatch\":" << result.committedMismatch
+         << ",\"misrecovered\":" << result.misrecovered
          << ",\"erroneous_commit\":" << (result.erroneousCommit ? "true" : "false")
          << ",\"refused\":" << (result.refused ? "true" : "false")
          << ",\"score_row\":" << result.scoreRow
@@ -1871,6 +1945,38 @@ TEST(Phase3ClosedLoop, UnitMechanisms)
                   noScrubBank.phase1Storage().readProtected(ceKey).status);
         EXPECT_EQ(DRAMSim::Phase1EccStatus::UNCORRECTABLE,
                   noScrubBank.phase1Storage().readProtected(ueKey).status);
+    }
+
+    // 6. PARA trigger accounting and OURS-EPOCH clean-run exactness.
+    {
+        ReadDisturbanceModel paraModel;
+        paraModel.configure(1ull, 1.0, "HBM2");
+        RegionMap paraMap;
+        paraMap.configure("PARA", 1.5, 2.0, 1.0);
+        paraMap.setParaProbability(1.0);
+        paraMap.noteActivate(0, 100, &paraModel);
+        const unsigned abBanks[8] = {0, 2, 4, 6, 8, 10, 12, 14};
+        paraMap.noteCommand(200, abBanks, 8, &paraModel);
+        EXPECT_EQ(1ull, paraMap.paraSbCommands());
+        EXPECT_EQ(1ull, paraMap.paraAbCommands());
+        EXPECT_EQ(2ull, paraMap.paraCommands());
+
+        RegionMap oursMap;
+        oursMap.configure("OURS", 1.1, 2.0, 1.0);
+        oursMap.setSeed(20261122ull);
+        RegionMap badEpochMap;
+        badEpochMap.configure("OURS-EPOCH", 1.1, 2.0, 1.0);
+        badEpochMap.setSeed(20261122ull);
+        EXPECT_TRUE(badEpochMap.epochCorrupt());
+        bool sawCorruptLogical = false;
+        for (unsigned r = 0; r < 64u; ++r)
+        {
+            const unsigned p = badEpochMap.physical(r);
+            EXPECT_EQ(oursMap.physical(r), p);
+            if (badEpochMap.logical(p) != r)
+                sawCorruptLogical = true;
+        }
+        EXPECT_TRUE(sawCorruptLogical);
     }
 }
 

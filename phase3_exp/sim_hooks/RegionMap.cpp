@@ -2,6 +2,7 @@
 
 #include "ReadDisturbanceModel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -53,6 +54,8 @@ void RegionMap::configure(const std::string& scheme, double g, double c, double 
     swaps_ = 0;
     commands_ = 0;
     paraCommands_ = 0;
+    paraSbCommands_ = 0;
+    paraAbCommands_ = 0;
     rng_ = 0x9E3779B97F4A7C15ull;
     sawL2_ = false;
     swapped_.assign(kRows, 0);
@@ -194,6 +197,12 @@ void RegionMap::swapOnce(unsigned regionIndex, ReadDisturbanceModel* model)
         left += 1;
     if (left >= regionRows_)
     {
+        left = 0;
+        while (left < regionRows_ && (region.migrated[left] || left > (left ^ delta)))
+            left += 1;
+    }
+    if (left >= regionRows_)
+    {
         region.keyOld = region.keyNew;
         if (prngKeys_)
             region.keyNew = static_cast<unsigned>(nextRandom() & (regionRows_ - 1u));
@@ -328,6 +337,12 @@ unsigned RegionMap::migrationSource(unsigned regionIndex) const
     while (left < regionRows_ && (region.migrated[left] || left > (left ^ delta)))
         left += 1;
     if (left >= regionRows_)
+    {
+        left = 0;
+        while (left < regionRows_ && (region.migrated[left] || left > (left ^ delta)))
+            left += 1;
+    }
+    if (left >= regionRows_)
         left = 0;
     const unsigned right = left ^ delta;
     const unsigned source = regionIndex * regionRows_ + (left ^ region.keyOld);
@@ -361,6 +376,10 @@ void RegionMap::noteCommand(unsigned row, const unsigned* banks, unsigned nBanks
             if (draw < paraP_)
             {
                 paraCommands_ += 1;
+                if (nBanks <= 1u)
+                    paraSbCommands_ += 1;
+                else
+                    paraAbCommands_ += 1;
                 for (unsigned i = 0; i < nBanks; ++i)
                 {
                     const unsigned bank = banks[i];
@@ -437,7 +456,7 @@ void RegionMap::forceSwap(ReadDisturbanceModel* model)
 
 void RegionMap::noteCe(unsigned bank, unsigned physicalRow)
 {
-    if (!ceFeedback_ || bank >= kBanks || physicalRow >= kRows || regions_.empty())
+    if (!ceFeedback_ || !epochCheck_ || bank >= kBanks || physicalRow >= kRows || regions_.empty())
         return;
     unsigned owner = 0;
     bool found = false;
@@ -490,6 +509,13 @@ void RegionMap::noteCe(unsigned bank, unsigned physicalRow)
     {
         region.level = 1;
         transitions_.push_back(Transition{commands_, regionOf(owner), 0u, 1u});
+        unsigned delta = region.keyOld ^ region.keyNew;
+        if (delta == 0)
+            delta = 1;
+        const unsigned ownerOff = offsetOf(owner);
+        const unsigned pairLeader = std::min(ownerOff, ownerOff ^ delta);
+        if (pairLeader < regionRows_ && !region.migrated[pairLeader])
+            region.nextPair = pairLeader;
         // The fast period is due now.  A cross-region hammer never increments
         // this region's counter, so the CE itself has to release the first swap.
         const unsigned every = period(regionOf(owner));

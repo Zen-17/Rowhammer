@@ -37,7 +37,8 @@ SUMMARY_FIELDS = [
     "workload", "scheme", "attack", "scale", "device", "status",
     "n_expected", "n_success", "n_failed", "O1", "O2", "O3", "O4", "O5", "O6",
     "o6_rate", "wilson_low", "wilson_high", "zero_escape_upper",
-    "mean_latent_flips", "mean_flips", "mean_cycles", "mean_effective_throughput"
+    "mean_latent_flips", "mean_flips", "mean_cycles", "mean_effective_throughput",
+    "misrecovered"
 ]
 SCHEMES = ["NONE", "REACT", "PARA", "FIX", "ADA", "OURS"]
 ABLATIONS = ["OURS-CE", "OURS-SCRUB", "OURS-EPOCH", "OURS-G1.5", "OURS-DET"]
@@ -174,13 +175,42 @@ def e5_specs() -> list:
     return rows
 
 
+def e5_patch_specs() -> list:
+    rows = []
+    for workload in ("W2", "DEC"):
+        for attack in ("A1", "A3", "A4"):
+            for scheme in ("PARA",):
+                count = 8 if QUICK else 100
+                for index in range(count):
+                    rows.append(make_spec("e5", workload, scheme, attack, SCALE, index))
+        for attack in ("A3",):
+            for scheme in ("FIX", "ADA", "OURS"):
+                count = 12 if scheme == "OURS" else 8
+                if not QUICK:
+                    count = 300 if scheme == "OURS" else 100
+                for index in range(count):
+                    rows.append(make_spec("e5", workload, scheme, attack, SCALE, index))
+    return rows
+
+
 def reference_specs() -> list:
     rows = []
     for workload in ("W2", "DEC"):
         count = 2 if QUICK else 4
-        for index in range(count):
-            rows.append(make_spec("ref", workload, "NONE", "NO_ATK", SCALE, index, tag_suffix="ref_s16"))
+        for scheme in ("NONE", "PARA", "FIX", "ADA", "OURS"):
+            for index in range(count):
+                rows.append(make_spec("ref", workload, scheme, "NO_ATK", SCALE, index, swap_mode="v1", tag_suffix="ref_s16"))
         rows.append(make_spec("ref", workload, "NONE", "NO_ATK", 1.0, 0, tag_suffix="ref_s1"))
+    return rows
+
+
+def v2_benign_specs() -> list:
+    rows = []
+    for workload in ("W2", "DEC"):
+        count = 2 if QUICK else 4
+        for scheme in ("NONE", "PARA", "FIX", "ADA", "OURS"):
+            for index in range(count):
+                rows.append(make_spec("v2_benign", workload, scheme, "NO_ATK", SCALE, index, swap_mode="v2", tag_suffix="v2_benign"))
     return rows
 
 
@@ -207,6 +237,17 @@ def v2_specs() -> list:
     rows = []
     for workload in ("W2", "DEC"):
         for attack in ("A1", "A3"):
+            for scheme in ("FIX", "ADA", "OURS"):
+                count = 4 if QUICK else 20
+                for index in range(count):
+                    rows.append(make_spec("v2", workload, scheme, attack, SCALE, index, swap_mode="v2", tag_suffix="v2"))
+    return rows
+
+
+def v2_patch_specs() -> list:
+    rows = []
+    for workload in ("W2", "DEC"):
+        for attack in ("A3",):
             for scheme in ("FIX", "ADA", "OURS"):
                 count = 4 if QUICK else 20
                 for index in range(count):
@@ -315,6 +356,8 @@ def classify_row(raw: dict, path: Path | None = None) -> dict:
         "error": raw.get("error", ""),
         "gen_mode": raw.get("gen_mode", "HBM2"),
         "variant": variant,
+        "misrecovered": int(raw.get("misrecovered", 0) or 0),
+        "para_cycles": int(raw.get("para_cycles", 0) or 0),
     }
 
 
@@ -348,6 +391,7 @@ def aggregate(rows: list, expected: dict) -> list:
         throughput = [float(sample["effective_throughput"]) for sample in success]
         cycles = [float(sample["cycles"]) for sample in success]
         flips = [float(sample["flips"]) for sample in success]
+        misrecovered_count = sum(1 for sample in success if int(sample.get("misrecovered", 0) or 0) > 0)
         device = "HBM3" if any(s.get("gen_mode") == "HBM3_STYLE" for s in success) else "HBM2"
         summary.append({
             "workload": workload, "scheme": scheme, "attack": attack, "scale": scale,
@@ -364,6 +408,7 @@ def aggregate(rows: list, expected: dict) -> list:
             "mean_flips": f"{(sum(flips) / n) if n else 0:.6f}",
             "mean_cycles": f"{(sum(cycles) / n) if n else 0:.1f}",
             "mean_effective_throughput": f"{(sum(throughput) / n) if n else 0:.8e}",
+            "misrecovered": misrecovered_count,
         })
     return summary
 
@@ -381,12 +426,20 @@ def aggregate_by_variant(rows: list) -> list:
         for sample in success:
             counts[sample["outcome"]] += 1
         n = len(success)
+        rate, low, high = wilson(counts["O6"], n) if n else (None, None, None)
+        upper = zero_escape_upper(n) if n and counts["O6"] == 0 else None
         latent = [float(sample["latent_flips"]) for sample in success]
         cycles = [float(sample["cycles"]) for sample in success]
         flips = [float(sample["flips"]) for sample in success]
         summary.append({
             "variant": variant, "workload": workload, "scheme": scheme, "attack": attack, "scale": scale,
             "n_success": n, "n_failed": len(samples) - n,
+            "O1": counts["O1"], "O2": counts["O2"], "O3": counts["O3"],
+            "O4": counts["O4"], "O5": counts["O5"], "O6": counts["O6"],
+            "o6_rate": "" if rate is None else f"{rate:.8f}",
+            "wilson_low": "" if low is None else f"{low:.8f}",
+            "wilson_high": "" if high is None else f"{high:.8f}",
+            "zero_escape_upper": "" if upper is None else f"{upper:.8f}",
             "mean_cycles": f"{(sum(cycles) / n) if n else 0:.1f}",
             "mean_flips": f"{(sum(flips) / n) if n else 0:.6f}",
             "mean_latent_flips": f"{(sum(latent) / n) if n else 0:.6f}",
@@ -435,7 +488,7 @@ def load_results(kind: str) -> list:
 
 
 def check_g4(e5_rows: list, e6_rows: list, e5_summary: list, e6_summary: list) -> dict:
-    """Real Statistical Gate G4 Evaluator."""
+    """Strict One-Sided Worsening + Seed-Paired CRN Gate G4 Evaluator."""
     crit1_pass = True
     crit1_notes = []
 
@@ -467,54 +520,94 @@ def check_g4(e5_rows: list, e6_rows: list, e5_summary: list, e6_summary: list) -
             grouped_e6.setdefault((r["scheme"], r["attack"]), []).append(r)
 
     ablations_eval = {}
-    metrics = ["o6_flag", "replay_or_fail_flag", "flips", "latent_flips", "cycles"]
+    metrics = ["o6_flag", "misrecovered_flag", "replay_or_fail_flag", "flips", "latent_flips", "cycles"]
 
     for (sch, atk), abl_list in grouped_e6.items():
         ours_list = ours_samples_by_attack.get(atk, [])
         if not ours_list:
             continue
 
-        max_z_for_pair = 0.0
+        max_worsening_z = 0.0
         best_metric = ""
+        max_paired_z = 0.0
+        best_paired_metric = ""
+
+        ours_by_idx = {int(s["index"]): s for s in ours_list}
+        abl_by_idx = {int(s["index"]): s for s in abl_list}
 
         for m in metrics:
             def extract_val(sample, metric_name):
                 if metric_name == "o6_flag":
                     return 1.0 if sample["outcome"] == "O6" else 0.0
+                elif metric_name == "misrecovered_flag":
+                    return 1.0 if int(sample.get("misrecovered", 0) or 0) > 0 else 0.0
                 elif metric_name == "replay_or_fail_flag":
                     return 1.0 if sample["outcome"] in ("O3", "O4", "O5", "O6") else 0.0
                 else:
                     return float(sample.get(metric_name, 0.0) or 0.0)
 
+            # 1. Unpaired signed worsening z-score
             vals_a = [extract_val(s, m) for s in abl_list]
             vals_b = [extract_val(s, m) for s in ours_list]
 
             mean_a = sum(vals_a) / len(vals_a) if vals_a else 0.0
             mean_b = sum(vals_b) / len(vals_b) if vals_b else 0.0
+            diff = mean_a - mean_b
 
-            var_a = sum((x - mean_a)**2 for x in vals_a) / (len(vals_a) - 1) if len(vals_a) > 1 else 0.0
-            var_b = sum((x - mean_b)**2 for x in vals_b) / (len(vals_b) - 1) if len(vals_b) > 1 else 0.0
-
-            denom = math.sqrt(var_a / len(vals_a) + var_b / len(vals_b)) if (len(vals_a) > 0 and len(vals_b) > 0) else 0.0
-            if denom == 0.0:
-                z = 0.0 if mean_a == mean_b else 99.0
+            if diff <= 0.0:
+                z_unpaired = 0.0
             else:
-                z = abs(mean_a - mean_b) / denom
+                var_a = sum((x - mean_a)**2 for x in vals_a) / (len(vals_a) - 1) if len(vals_a) > 1 else 0.0
+                var_b = sum((x - mean_b)**2 for x in vals_b) / (len(vals_b) - 1) if len(vals_b) > 1 else 0.0
+                denom = math.sqrt(var_a / len(vals_a) + var_b / len(vals_b)) if (len(vals_a) > 0 and len(vals_b) > 0) else 0.0
+                if denom == 0.0:
+                    z_unpaired = 99.0
+                else:
+                    z_unpaired = diff / denom
 
-            if z > max_z_for_pair:
-                max_z_for_pair = z
+            if z_unpaired > max_worsening_z:
+                max_worsening_z = z_unpaired
                 best_metric = m
 
-        ablations_eval.setdefault(sch, {})[atk] = {"max_abs_z": max_z_for_pair, "best_metric": best_metric}
+            # 2. Seed-paired Common-Random-Numbers (CRN) worsening z-score
+            shared = sorted(set(abl_by_idx.keys()) & set(ours_by_idx.keys()))
+            if len(shared) > 1:
+                d_vals = [extract_val(abl_by_idx[i], m) - extract_val(ours_by_idx[i], m) for i in shared]
+                mean_d = sum(d_vals) / len(d_vals)
+                if mean_d > 0.0:
+                    var_d = sum((x - mean_d)**2 for x in d_vals) / (len(d_vals) - 1)
+                    se_d = math.sqrt(var_d / len(d_vals))
+                    z_paired = 99.0 if se_d == 0.0 else (mean_d / se_d)
+                else:
+                    z_paired = 0.0
+            else:
+                z_paired = 0.0
 
-    # Playbook §5 G4 Criterion 2: each of the 5 ablations achieves max_abs_z >= 1.96 on at least one tested attack
+            if z_paired > max_paired_z:
+                max_paired_z = z_paired
+                best_paired_metric = m
+
+        ablations_eval.setdefault(sch, {})[atk] = {
+            "max_abs_z": max_worsening_z,
+            "max_worsening_z": max_worsening_z,
+            "best_metric": best_metric,
+            "max_paired_z": max_paired_z,
+            "best_paired_metric": best_paired_metric
+        }
+
     all_z_pass = True
     scheme_passes = {}
     for sch in ABLATIONS:
         pair_dict = ablations_eval.get(sch, {})
-        scheme_max = max((v["max_abs_z"] for v in pair_dict.values()), default=0.0)
-        passed = scheme_max >= 1.96
-        scheme_passes[sch] = {"max_z": scheme_max, "passed": passed}
+        scheme_max_unpaired = max((v["max_worsening_z"] for v in pair_dict.values()), default=0.0)
+        scheme_max_paired = max((v["max_paired_z"] for v in pair_dict.values()), default=0.0)
+        passed = scheme_max_unpaired >= 1.96
+        scheme_passes[sch] = {
+            "max_z": scheme_max_unpaired,
+            "max_worsening_z": scheme_max_unpaired,
+            "max_paired_z": scheme_max_paired,
+            "passed": passed
+        }
         if not passed:
             all_z_pass = False
 
@@ -537,6 +630,7 @@ def summarize() -> None:
         "workload", "scheme", "attack", "scale", "index", "seed", "status", "outcome",
         "flips", "latent_flips", "cycles", "pim_items", "useful_pim_items", "effective_throughput",
         "bit_exact", "replayed", "withheld", "recovery_failed", "error", "gen_mode", "variant",
+        "misrecovered", "para_cycles",
     ]
     e5_rows = load_results("e5")
     real_rows = load_results("real")
@@ -544,6 +638,8 @@ def summarize() -> None:
     hbm3_rows = load_results("hbm3")
     v2_rows = load_results("v2")
     e7_rows = load_results("e7")
+    ref_rows = load_results("ref")
+    v2_benign_rows = load_results("v2_benign")
 
     write_csv(RESULTS / "E5_clean_runs.csv", e5_rows, fields)
     write_csv(RESULTS / "E5_real_threshold_runs.csv", real_rows, fields)
@@ -551,6 +647,8 @@ def summarize() -> None:
     write_csv(RESULTS / "HBM3_runs.csv", hbm3_rows, fields)
     write_csv(RESULTS / "V2_runs.csv", v2_rows, fields)
     write_csv(RESULTS / "E7_runs.csv", e7_rows, fields)
+    write_csv(RESULTS / "Ref_runs.csv", ref_rows, fields)
+    write_csv(RESULTS / "V2_benign_runs.csv", v2_benign_rows, fields)
 
     e5_summary = aggregate(e5_rows, expected_map("e5"))
     real_summary = aggregate(real_rows, expected_map("real"))
@@ -565,7 +663,7 @@ def summarize() -> None:
     write_csv(RESULTS / "HBM3_summary.csv", hbm3_summary, SUMMARY_FIELDS)
     write_csv(RESULTS / "V2_summary.csv", v2_summary, SUMMARY_FIELDS)
 
-    e7_fields = ["variant", "workload", "scheme", "attack", "scale", "n_success", "n_failed", "mean_cycles", "mean_flips", "mean_latent_flips"]
+    e7_fields = ["variant", "workload", "scheme", "attack", "scale", "n_success", "n_failed", "O1", "O2", "O3", "O4", "O5", "O6", "o6_rate", "wilson_low", "wilson_high", "zero_escape_upper", "mean_cycles", "mean_flips", "mean_latent_flips"]
     write_csv(RESULTS / "E7_sensitivity.csv", e7_summary, e7_fields)
 
     e5_cycles_map = {(r["workload"], r["scheme"], r["attack"]): float(r["mean_cycles"]) for r in e5_summary}
@@ -582,6 +680,39 @@ def summarize() -> None:
         })
     write_csv(RESULTS / "M4_v2_timing_delta.csv", delta_rows, ["workload", "scheme", "attack", "base_cycles", "v2_cycles", "delta_cycles"])
 
+    # Benign NO_ATK v1 vs v2 overhead (M4_v2_benign_overhead.csv)
+    ref_success = [r for r in ref_rows if r["status"] == "SUCCESS" and r.get("attack") == "NO_ATK" and abs(float(r["scale"]) - SCALE) < 1e-6]
+    v2_b_success = [r for r in v2_benign_rows if r["status"] == "SUCCESS" and r.get("attack") == "NO_ATK" and abs(float(r["scale"]) - SCALE) < 1e-6]
+
+    ref_map = {}
+    for r in ref_success:
+        ref_map.setdefault((r["workload"], r["scheme"]), []).append(float(r["cycles"]))
+    v2_b_map = {}
+    for r in v2_b_success:
+        v2_b_map.setdefault((r["workload"], r["scheme"]), []).append(float(r["cycles"]))
+
+    none_ref_cycles = {wl: (sum(ref_map.get((wl, "NONE"), [0])) / len(ref_map.get((wl, "NONE"), [1])) if ref_map.get((wl, "NONE")) else 1.0) for wl in ("W2", "DEC")}
+    none_v2_cycles = {wl: (sum(v2_b_map.get((wl, "NONE"), [0])) / len(v2_b_map.get((wl, "NONE"), [1])) if v2_b_map.get((wl, "NONE")) else 1.0) for wl in ("W2", "DEC")}
+
+    overhead_rows = []
+    for workload in ("W2", "DEC"):
+        none_v1 = none_ref_cycles.get(workload, 1.0)
+        none_v2 = none_v2_cycles.get(workload, 1.0)
+        for scheme in ("NONE", "PARA", "FIX", "ADA", "OURS"):
+            v1_lst = ref_map.get((workload, scheme), [])
+            v2_lst = v2_b_map.get((workload, scheme), [])
+            v1_mean = (sum(v1_lst) / len(v1_lst)) if v1_lst else 0.0
+            v2_mean = (sum(v2_lst) / len(v2_lst)) if v2_lst else 0.0
+            v1_ovh = (100.0 * (v1_mean - none_v1) / none_v1) if (none_v1 > 0 and v1_lst) else 0.0
+            v2_ovh = (100.0 * (v2_mean - none_v2) / none_v2) if (none_v2 > 0 and v2_lst) else 0.0
+            overhead_rows.append({
+                "workload": workload, "scheme": scheme, "scale": SCALE,
+                "n_v1": len(v1_lst), "n_v2": len(v2_lst),
+                "v1_cycles": f"{v1_mean:.1f}", "v2_cycles": f"{v2_mean:.1f}",
+                "v1_overhead_pct": f"{v1_ovh:.4f}", "v2_overhead_pct": f"{v2_ovh:.4f}"
+            })
+    write_csv(RESULTS / "M4_v2_benign_overhead.csv", overhead_rows, ["workload", "scheme", "scale", "n_v1", "n_v2", "v1_cycles", "v2_cycles", "v1_overhead_pct", "v2_overhead_pct"])
+
     g4 = check_g4(e5_rows, e6_rows, e5_summary, e6_summary)
     print(f"Gate G4 Evaluation Result: {g4['status']}", flush=True)
 
@@ -591,17 +722,24 @@ def main() -> None:
     if phase in ("all", "e5"):
         pool(e5_specs(), "e5")
         pool(reference_specs(), "ref")
+    if phase in ("patch", "e5_patch"):
+        pool(e5_patch_specs(), "e5")
+        pool(reference_specs(), "ref")
+    if phase in ("all", "v2_benign", "patch"):
+        pool(v2_benign_specs(), "v2_benign")
     if phase in ("all", "real"):
         pool(real_specs(), "real")
     if phase in ("all", "hbm3"):
         pool(hbm3_specs(), "hbm3")
     if phase in ("all", "v2"):
         pool(v2_specs(), "v2")
-    if phase in ("all", "e6"):
+    if phase in ("patch", "v2_patch"):
+        pool(v2_patch_specs(), "v2")
+    if phase in ("all", "e6", "patch"):
         pool(e6_specs(), "e6")
     if phase in ("all", "e7"):
         pool(e7_specs(), "e7")
-    if phase in ("all", "e5", "real", "hbm3", "v2", "e6", "e7", "summarize"):
+    if phase in ("all", "e5", "real", "hbm3", "v2", "e6", "e7", "v2_benign", "patch", "summarize"):
         summarize()
 
 
