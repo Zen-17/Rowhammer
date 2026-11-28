@@ -1,0 +1,1 @@
+{"clean_none_exact":true,"clean_ours_exact":true,"clean_bad_epoch_exact":true,"none_a1_escapes":3,"ours_swap_cycles_5seeds":2119700,"fix_swap_cycles_5seeds":4063056,"epoch_race_ours_recovery":"SELECTIVE_RECOVERED","epoch_race_ours_exact":true,"epoch_race_bad_recovery":"SOURCE_REPAIRED_ONLY","epoch_race_bad_exact":false}
