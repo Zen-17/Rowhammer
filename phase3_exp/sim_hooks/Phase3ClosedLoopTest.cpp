@@ -659,7 +659,7 @@ struct ClosedLoopSession
 
         if (!epochCheck)
         {
-            region.setEpochCorrupt(true);
+            region.setEpochCorrupt(opts.corruptEpochMap);
             region.setEpochCheck(false);
             phase3SetLateReportTranslation(true);
             phase3SetReportEpochRelaxed(true);
@@ -1400,6 +1400,30 @@ ClosedLoopResult runClosedLoopInternal(const ClosedLoopOptions& opts,
                 result.attackTx += 1;
                 result.hostTx += 1;
                 result.cycles += drainReports(*session.feeder, reports, 8000000ull);
+            }
+        }
+
+        if (opts.attack != "NO_ATK")
+        {
+            const unsigned vicReg = result.attackRow / opts.regionN;
+            const unsigned preAddSteps = std::min<unsigned>(128u, session.region.period(vicReg));
+            if (preAddSteps > 0u)
+            {
+                unsigned farOff =
+                    ((result.physicalVictimEnd % opts.regionN) + (opts.regionN / 2u)) % opts.regionN;
+                if (farOff + 1u >= opts.regionN)
+                    farOff = (farOff >= 2u) ? (farOff - 2u) : 0u;
+                const unsigned rowA = vicReg * opts.regionN + farOff;
+                const unsigned rowB = rowA + 1u;
+                DRAMSim::BurstType scratch;
+                for (unsigned step = 0; step < preAddSteps; ++step)
+                {
+                    const unsigned row = (step % 2u == 0u) ? rowA : rowB;
+                    enqueueReadCol(*session.feeder, session.codec, 0, row, 0, scratch, "HOST_ATK");
+                    result.attackTx += 1;
+                    result.hostTx += 1;
+                    result.cycles += drainReports(*session.feeder, reports, 8000000ull);
+                }
             }
         }
 
